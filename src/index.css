@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+:root {
+  --azul-fundo: #041f43;
+  --turquesa: #00D9E9;
+  --ouro: #D4A574;
+  --teal: #2FA89F;
+  --verde-floresta: #1E7A6B;
+}
+
+body {
+  background-color: var(--azul-fundo);
+}
+@keyframes maresia {
+  0% {
+    transform: rotate(-3deg) translateY(0px);
+  }
+  25% {
+    transform: rotate(0deg) translateY(-6px);
+  }
+  50% {
+    transform: rotate(3deg) translateY(0px);
+  }
+  75% {
+    transform: rotate(0deg) translateY(-6px);
+  }
+  100% {
+    transform: rotate(-3deg) translateY(0px);
+  }
+}
+
+.animate-maresia {
+  animation: maresia 4s ease-in-out infinite;
+  transform-origin: bottom center;
+}
