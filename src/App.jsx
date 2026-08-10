@@ -38,7 +38,7 @@ function App() {
           }
         />
         <Route path="/vamos-la" element={<VamosLa />} />
-        <Route path="/barco/:id" element={<BarcoDetalhes />} />
+        <Route path="/viagem/:id" element={<BarcoDetalhes />} /> 
       </Routes>
       <Footer />
     </BrowserRouter>
