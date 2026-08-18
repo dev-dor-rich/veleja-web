@@ -77,6 +77,7 @@ const useDadosStore = create(
       removerBarco: (id) => {
         set((estado) => ({
           listaBarcos: estado.listaBarcos.filter((barco) => barco.id !== id),
+          listaViagens: estado.listaViagens.filter((viagem) => viagem.barcoId !== id),
         }));
       },
 

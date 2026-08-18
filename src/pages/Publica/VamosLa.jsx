@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import useDadosStore from '../../store/useDadosStore';
 import logo from '../../assets/logo.svg';
 
-const STATUS_CLASSES = {
-  'confirmada': { rotulo: 'Confirmada', textColor: '#4ade80', borderColor: '#4ade80' },
-  'a-confirmar': { rotulo: 'A Confirmar', textColor: '#facc15', borderColor: '#facc15' },
-  'cancelada': { rotulo: 'Cancelada', textColor: '#f87171', borderColor: '#f87171' },
-  'extraordinaria': { rotulo: 'Viagem Extraordinária', textColor: '#c084fc', borderColor: '#c084fc' },
+const STATUS_INFO = {
+  'confirmada': { rotulo: 'Confirmada', classe: 'text-green-400 bg-green-400/10 border border-green-400/30' },
+  'a-confirmar': { rotulo: 'A Confirmar', classe: 'text-yellow-400 bg-yellow-400/10 border border-yellow-400/30' },
+  'cancelada': { rotulo: 'Cancelada', classe: 'text-red-400 bg-red-400/10 border border-red-400/30' },
+  'extraordinaria': { rotulo: 'Viagem Extraordinária', classe: 'text-purple-400 bg-purple-400/10 border border-purple-400/30' },
 };
 
 
@@ -36,6 +36,10 @@ function VamosLa() {
   // Filtra viagens pela busca de municipio e filtros avancados
   const viagensFiltradas = useMemo(() => {
     return listaViagens.filter((viagem) => {
+      // Verifica se o barco ainda existe (evita dados órfãos)
+      const barcoExiste = listaBarcos.some((b) => b.id === viagem.barcoId);
+      if (!barcoExiste) return false;
+
       // Busca por municipio (origem ou destino)
       if (buscaMunicipio.trim()) {
         const termo = buscaMunicipio.toLowerCase();
