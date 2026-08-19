@@ -1,5 +1,19 @@
 <?php
-header('Access-Control-Allow-Origin: https://veleja.com.br'); // Mude aqui
+// Permitir CORS dinamicamente para desenvolvimento local e produção
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowed_origins = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'https://veleja.com.br',
+    'https://www.veleja.com.br'
+];
+
+if (in_array($origin, $allowed_origins)) {
+    header("Access-Control-Allow-Origin: $origin");
+}
+
 header('Access-Control-Allow-Methods: POST, OPTIONS, GET');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Credentials: true');

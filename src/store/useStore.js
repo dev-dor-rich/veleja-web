@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
-const API_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://veleja.com.br' 
-  : 'http://localhost:8001';
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:8000'
+  : 'https://veleja.com.br';
 
 const useStore = create((set) => ({
   // Estado
