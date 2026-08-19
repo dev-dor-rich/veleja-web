@@ -1,65 +1,112 @@
-// Store global da aplicação Veleja (Zustand)
-// Gerencia autenticação do administrador e estados de carregamento/erro
-
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
-const useStore = create(
-  persist(
-    (set) => ({
-      // ===== ESTADOS =====
-      usuarioAutenticado: false,
-      usuarioAdmin: null, // { id, email, nome }
-      carregando: false,
-      mensagemErro: null,
+const API_URL = 'http://localhost:8001'; // Mude para seu domínio em produção
 
-      // ===== ACTIONS =====
+const useStore = create((set) => ({
+  // Estado
+  admin: null,
+  autenticado: false,
+  carregando: false,
+  mensagemErro: '',
 
-      // Autentica o administrador
-      // Por enquanto é uma simulação (mock) — quando o backend Flask
-      // estiver pronto, troca o bloco try por uma chamada real à API
-      autenticar: async (email, senha) => {
-        set({ carregando: true, mensagemErro: null });
+  // Limpar mensagem de erro
+  limparErro: () => set({ mensagemErro: '' }),
 
-        if (!email || !senha) {
-          set({ carregando: false, mensagemErro: 'Preencha e-mail e senha.' });
-          return false;
-        }
+  // Fazer login
+  autenticar: async (email, senha) => {
+    set({ carregando: true, mensagemErro: '' });
 
-        try {
-          // TODO: substituir por: const resposta = await api.post('/login', { email, senha })
-          const usuarioSimulado = { id: 1, email, nome: 'Administrador' };
+    try {
+      const response = await fetch(`${API_URL}/api/login.php`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, senha }),
+        credentials: 'include', // Importante: enviar cookies
+      });
 
-          set({
-            usuarioAutenticado: true,
-            usuarioAdmin: usuarioSimulado,
-            carregando: false,
-            mensagemErro: null,
-          });
+      if (!response.ok) {
+        set({
+          mensagemErro: 'Erro no servidor (HTTP ' + response.status + '). Verifique se o PHP e o MySQL estão configurados.',
+          carregando: false,
+        });
+        return false;
+      }
 
-          return true;
-        } catch (erro) {
-          set({ carregando: false, mensagemErro: 'E-mail ou senha inválidos.' });
-          return false;
-        }
-      },
+      const dados = await response.json();
 
-      // Encerra a sessão do administrador
-      logout: () => {
-        set({ usuarioAutenticado: false, usuarioAdmin: null, mensagemErro: null });
-      },
-
-      definirCarregando: (valor) => set({ carregando: valor }),
-      definirErro: (mensagem) => set({ mensagemErro: mensagem }),
-    }),
-    {
-      name: 'veleja-auth', // chave usada no localStorage
-      partialize: (estado) => ({
-        usuarioAutenticado: estado.usuarioAutenticado,
-        usuarioAdmin: estado.usuarioAdmin,
-      }),
+      if (dados.sucesso) {
+        set({
+          autenticado: true,
+          admin: { email },
+          carregando: false,
+        });
+        return true;
+      } else {
+        set({
+          mensagemErro: dados.mensagem || 'Erro ao fazer login',
+          carregando: false,
+        });
+        return false;
+      }
+    } catch (erro) {
+      set({
+        mensagemErro: 'Não foi possível conectar ao servidor. Verifique se o PHP está rodando em ' + API_URL,
+        carregando: false,
+      });
+      console.error('Erro na autenticação:', erro);
+      return false;
     }
-  )
-);
+  },
+
+  // Verificar se está autenticado (chamar ao carregar a página)
+  verificarAutenticacao: async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/verificar_auth.php`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      const dados = await response.json();
+
+      if (dados.autenticado) {
+        set({
+          autenticado: true,
+          admin: { email: dados.admin_email },
+        });
+        return true;
+      } else {
+        set({
+          autenticado: false,
+          admin: null,
+        });
+        return false;
+      }
+    } catch (erro) {
+      console.error('Erro ao verificar autenticação:', erro);
+      set({ autenticado: false, admin: null });
+      return false;
+    }
+  },
+
+  // Fazer logout
+  logout: async () => {
+    try {
+      await fetch(`${API_URL}/api/logout.php`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (erro) {
+      console.error('Erro ao fazer logout:', erro);
+    }
+
+    set({
+      autenticado: false,
+      admin: null,
+      mensagemErro: '',
+    });
+  },
+}));
 
 export default useStore;

@@ -12,9 +12,9 @@ import BarcoDetalhes from './pages/Publica/BarcoDetalhes';
 // Protege rotas que só o administrador autenticado pode acessar.
 // Se não estiver autenticado, redireciona pra tela de login.
 function RotaProtegida({ children }) {
-  const usuarioAutenticado = useStore((estado) => estado.usuarioAutenticado);
+  const autenticado = useStore((estado) => estado.autenticado);
 
-  if (!usuarioAutenticado) {
+  if (!autenticado) {
     return <Navigate to="/admin/login" replace />;
   }
 

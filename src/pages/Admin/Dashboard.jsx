@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import useStore from '../../store/useStore';
 import Municipios from './modulos/Municipios';
 import Portos from './modulos/Portos';
 import Barcos from './modulos/Barcos';
@@ -17,10 +19,12 @@ const SECOES = [
 
 function Dashboard() {
   const [secaoAtiva, setSecaoAtiva] = useState('barcos');
+  const logout = useStore((s) => s.logout);
+  const navegar = useNavigate();
 
   return (
     <div className="min-h-[calc(100vh-64px)] flex flex-col md:flex-row">
-      <nav className="md:w-56 bg-[#0a2e5c] border-b md:border-b-0 md:border-r border-white/10 md:min-h-[calc(100vh-64px)]">
+      <nav className="md:w-56 bg-[#0a2e5c] border-b md:border-b-0 md:border-r border-white/10 md:min-h-[calc(100vh-64px)] flex flex-col">
         <ul className="flex md:flex-col overflow-x-auto md:overflow-visible">
           {SECOES.map((secao) => (
             <li key={secao.id} className="flex-shrink-0 md:flex-shrink">
@@ -38,6 +42,14 @@ function Dashboard() {
             </li>
           ))}
         </ul>
+        <div className="hidden md:block px-4 py-3 mt-auto border-t border-white/10">
+          <button
+            onClick={() => { logout(); navegar('/admin/login'); }}
+            className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+          >
+            Sair
+          </button>
+        </div>
       </nav>
 
       <main className="flex-1 p-6">

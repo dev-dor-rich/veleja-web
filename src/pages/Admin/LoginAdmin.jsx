@@ -1,6 +1,5 @@
 // Página de login do administrador
-// Não há cadastro por aqui de propósito — você adiciona os logins
-// manualmente no banco de dados
+// Conecta com o backend PHP para autenticação segura
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,7 +14,6 @@ function LoginAdmin() {
   const autenticar = useStore((estado) => estado.autenticar);
   const carregando = useStore((estado) => estado.carregando);
   const mensagemErro = useStore((estado) => estado.mensagemErro);
-
   const navegar = useNavigate();
 
   const handleSubmit = async (evento) => {
@@ -24,6 +22,8 @@ function LoginAdmin() {
     const sucesso = await autenticar(email, senha);
 
     if (sucesso) {
+      setEmail('');
+      setSenha('');
       navegar('/admin/dashboard');
     }
   };
@@ -49,8 +49,9 @@ function LoginAdmin() {
               required
               value={email}
               onChange={(evento) => setEmail(evento.target.value)}
-              className="w-full bg-[#041f43] border border-white/20 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#00D9E9]"
-              placeholder="seuemail@veleja.com"
+              disabled={carregando}
+              className="w-full bg-[#041f43] border border-white/20 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#00D9E9] disabled:opacity-50"
+              placeholder="admin@veleja.com"
             />
           </div>
 
@@ -64,19 +65,31 @@ function LoginAdmin() {
               required
               value={senha}
               onChange={(evento) => setSenha(evento.target.value)}
-              className="w-full bg-[#041f43] border border-white/20 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#00D9E9]"
+              disabled={carregando}
+              className="w-full bg-[#041f43] border border-white/20 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#00D9E9] disabled:opacity-50"
               placeholder="••••••••"
             />
           </div>
 
           {mensagemErro && (
-            <p className="text-red-400 text-sm">{mensagemErro}</p>
+            <div className="bg-red-500/20 border border-red-500 text-red-300 text-sm rounded-lg px-3 py-2">
+              {mensagemErro}
+            </div>
           )}
 
-          <Button type="submit" tipo="primary" tamanho="medium" disabled={carregando}>
+          <Button 
+            type="submit" 
+            tipo="primary" 
+            tamanho="medium" 
+            disabled={carregando}
+          >
             {carregando ? 'Entrando...' : 'Entrar'}
           </Button>
         </form>
+
+        <p className="text-xs text-gray-400 text-center mt-4">
+          Apenas admins têm acesso a esta área
+        </p>
       </div>
     </div>
   );
