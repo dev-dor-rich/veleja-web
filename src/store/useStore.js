@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 
-const API_URL = 'http://localhost:8001'; // Mude para seu domínio em produção
+const API_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://veleja.com.br' 
+  : 'http://localhost:8001';
 
 const useStore = create((set) => ({
   // Estado
