@@ -1,13 +1,13 @@
 {
   "functions": {
-    "backend/api/*.php": {
+    "api/*.php": {
       "runtime": "vercel-php@0.7.2"
     }
   },
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "backend/api/$1.php"
+      "dest": "/backend/api/$1.php"
     },
     {
       "handle": "filesystem"
@@ -18,4 +18,3 @@
     }
   ]
 }
-
