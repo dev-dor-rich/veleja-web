@@ -7,7 +7,8 @@ $allowed_origins = [
     'http://127.0.0.1:5173',
     'http://127.0.0.1:5174',
     'https://veleja.com.br',
-    'https://www.veleja.com.br'
+    'https://www.veleja.com.br',
+    'https://veleja-site-git-main-veleja.vercel.app',
 ];
 
 if (in_array($origin, $allowed_origins)) {
@@ -17,7 +18,8 @@ if (in_array($origin, $allowed_origins)) {
 header('Access-Control-Allow-Methods: POST, OPTIONS, GET');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Credentials: true');
-header("Access-Control-Allow-Origin: https://veleja.com.br");
+header('Content-Type: application/json; charset=UTF-8');
+
 
 
 // Responder a preflight requests
