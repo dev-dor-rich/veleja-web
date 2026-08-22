@@ -1,13 +1,13 @@
 {
-  "functions": {
-    "api/*.php": {
-      "runtime": "php-8.2"
-    }
-  },
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "routes": [
     {
-      "src": "/api/(.+)",
-      "dest": "/api/$1.php"
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
