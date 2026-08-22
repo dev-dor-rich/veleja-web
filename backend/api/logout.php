@@ -18,6 +18,7 @@ if (in_array($origin, $allowed_origins)) {
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Credentials: true');
+header("Access-Control-Allow-Origin: https://veleja.com.br");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);

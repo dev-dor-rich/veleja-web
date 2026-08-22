@@ -7,7 +7,7 @@ const isLocal = window.location.hostname === 'localhost' ||
 
 const API_URL = isLocal
   ? `http://${window.location.hostname}:8000`
-  : 'https://veleja.com.br';
+  : 'https://railway.app';
 
 const useStore = create((set) => ({
   // Estado

@@ -17,6 +17,8 @@ if (in_array($origin, $allowed_origins)) {
 header('Access-Control-Allow-Methods: POST, OPTIONS, GET');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Credentials: true');
+header("Access-Control-Allow-Origin: https://veleja.com.br");
+
 
 // Responder a preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
