@@ -8,7 +8,8 @@ $allowed_origins = [
     'http://127.0.0.1:5174',
     'https://veleja.com.br',
     'https://www.veleja.com.br',
-    'http://localhost:8000'
+    'https://veleja-site.vercel.app',
+    'https://veleja-site-git-main-veleja.vercel.app',
 ];
 
 if (in_array($origin, $allowed_origins)) {
@@ -24,6 +25,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
+
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'domain' => '', // deixe vazio, ou defina se usar subdomínio específico
+    'secure' => true,      // obrigatório com SameSite=None
+    'httponly' => true,
+    'samesite' => 'None',  // permite cookie cross-site (Vercel -> Railway)
+]);
 
 session_start();
 

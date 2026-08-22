@@ -8,6 +8,7 @@ $allowed_origins = [
     'http://127.0.0.1:5174',
     'https://veleja.com.br',
     'https://www.veleja.com.br',
+    'https://veleja-site.vercel.app',
     'https://veleja-site-git-main-veleja.vercel.app',
 ];
 
@@ -67,6 +68,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Validar senha com hash
         if (password_verify($senha, $admin['senha_hash'])) {
+            // Configurar cookie de sessão para funcionar entre domínios diferentes
+            // (frontend no Vercel, backend no Railway)
+            session_set_cookie_params([
+                'lifetime' => 0,
+                'path' => '/',
+                'domain' => '',
+                'secure' => true,      // obrigatório com SameSite=None
+                'httponly' => true,
+                'samesite' => 'None',  // permite cookie cross-site (Vercel -> Railway)
+            ]);
+
             // Iniciar sessão segura
             session_start();
             $_SESSION['admin_id'] = $admin['id'];
