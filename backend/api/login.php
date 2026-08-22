@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // ... resto do código
 
-require __DIR__ . '/../config/database.php';
+require dirname(__DIR__) . '/config/database.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dados = json_decode(file_get_contents('php://input'), true);
