@@ -7,7 +7,7 @@ const isLocal = window.location.hostname === 'localhost' ||
 
 const API_URL = isLocal
   ? `http://${window.location.hostname}:8000`
-  : 'veleja-site-production.up.railway.app';
+  : 'https://veleja-site-production.up.railway.app';
 
 const useStore = create((set) => ({
   // Estado
@@ -24,7 +24,7 @@ const useStore = create((set) => ({
     set({ carregando: true, mensagemErro: '' });
 
     try {
-      const response = await fetch(`${API_URL}/api/login.php`, {
+      const response = await fetch(`${API_URL}/backend/api/login.php`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
