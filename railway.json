@@ -2,6 +2,8 @@
   "$schema": "https://railway.com",
   "build": {
     "builder": "NIXPACKS",
+    "providers": ["php"],
+    "aptPackages": ["php-mysqli", "php-mysql"],
     "buildCommand": "echo 'Ignorando build do frontend'"
   },
   "deploy": {
