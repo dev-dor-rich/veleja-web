@@ -143,15 +143,50 @@ function GerenciarViagens() {
       return { ...anterior, paradas: novasParadas };
     });
   };
-
   const handleSalvar = (evento) => {
-    evento.preventDefault();
+  evento.preventDefault();
 
-    if (!form.barcoId || !form.portoSaidaId || !form.portoChegadaId || !form.dataViagem) {
-      setErro('Preencha os campos obrigatórios na interface.');
-      return;
-    }
+  if (!form.barcoId || !form.portoSaidaId || !form.portoChegadaId || !form.dataViagem) {
+    setErro('Preencha os campos obrigatórios na interface.');
+    return;
+  }
 
+  setErro('');
+  const metodo = editandoId ? 'PUT' : 'POST';
+
+  const corpo = {
+    ...(editandoId ? { id: editandoId } : {}),
+    barcoId: form.barcoId,
+    portoSaidaId: form.portoSaidaId,
+    horarioPartida: form.horarioPartida,
+    portoChegadaId: form.portoChegadaId,
+    horarioChegada: form.horarioChegada,
+    dataViagem: form.dataViagem,
+    status: form.status,
+    paradas: form.paradas,
+  };
+
+  fetch(`${API_URL}/api/viagens.php`, {
+    method: metodo,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo),
+  })
+    .then((res) => res.json())
+    .then((resposta) => {
+      if (resposta.sucesso) {
+        setEditandoId(null);
+        setForm(FORM_VAZIO);
+        setMostrarFormulario(false);
+        carregarViagensDoBanco();
+      } else {
+        setErro(resposta.mensagem || 'Erro da API ao salvar');
+      }
+    })
+    .catch(() => setErro('Erro de conexão ao salvar viagem no banco'));
+};
+
+ 
     setErro('');
     const metodo = editandoId ? 'PUT' : 'POST';
 
@@ -236,31 +271,31 @@ function GerenciarViagens() {
     setAlterandoStatusId(null);
   };
 
-  const handleDuplicar = (viagem) => {
-    const { id, ...dadosSemId } = viagem;
+const handleDuplicar = (viagem) => {
+  const { id, ...dadosSemId } = viagem;
 
-    const corpoDuplicar = {
-      barco_id: dadosSemId.barcoId,
-      porto_saida_id: dadosSemId.portoSaidaId,
-      horario_partida: dadosSemId.horarioPartida,
-      porto_chegada_id: dadosSemId.portoChegadaId,
-      horario_chegada: dadosSemId.horarioChegada,
-      data_viagem: dadosSemId.dataViagem,
-      status: dadosSemId.status,
-      paradas: dadosSemId.paradas || [],
-    };
-
-    fetch(`${API_URL}/api/viagens.php`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(corpoDuplicar),
-    })
-      .then((res) => res.json())
-      .then((resposta) => {
-        if (resposta.sucesso) carregarViagensDoBanco();
-      });
+  const corpoDuplicar = {
+    barcoId: dadosSemId.barcoId,
+    portoSaidaId: dadosSemId.portoSaidaId,
+    horarioPartida: dadosSemId.horarioPartida,
+    portoChegadaId: dadosSemId.portoChegadaId,
+    horarioChegada: dadosSemId.horarioChegada,
+    dataViagem: dadosSemId.dataViagem,
+    status: dadosSemId.status,
+    paradas: dadosSemId.paradas || [],
   };
+
+  fetch(`${API_URL}/api/viagens.php`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpoDuplicar),
+  })
+    .then((res) => res.json())
+    .then((resposta) => {
+      if (resposta.sucesso) carregarViagensDoBanco();
+    });
+};
 
   const nomeBarco = (id) => listaBarcos.find((b) => String(b.id) === String(id))?.nome || 'indefinido';
   const nomePorto = (id) => listaPortos.find((p) => String(p.id) === String(id))?.nome || 'indefinido';
@@ -594,6 +629,6 @@ function GerenciarViagens() {
       )}
     </div>
   );
-}
+
 
 export default GerenciarViagens;
