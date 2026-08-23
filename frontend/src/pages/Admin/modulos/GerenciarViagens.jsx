@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import useDadosStore from '../../../store/useDadosStore';
+import useDadosStore from '../../../store/useDadosStore'; // Mantido APENAS para ler portos/municipios (se forem estáticos)
 import Button from '../../../components/Button';
 
 const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -27,16 +27,16 @@ const FORM_VAZIO = {
 const PARADA_VAZIA = { municipioId: '', portoId: '' };
 
 function GerenciarViagens() {
+  // Ler municípios e portos (se eles não mudam com frequência)
   const listaMunicipios = useDadosStore((s) => s.listaMunicipios);
   const listaPortos = useDadosStore((s) => s.listaPortos);
-  const listaBarcos = useDadosStore((s) => s.listaBarcos);
-  const setListaBarcosStore = useDadosStore((s) => s.setListaBarcos);
-  const setListaViagensStore = useDadosStore((s) => s.setListaViagens);
 
+  // ESTADOS LOCAIS: 100% independentes do Zustand para Barcos e Viagens
+  const [listaBarcos, setListaBarcos] = useState([]);
   const [listaViagens, setListaViagens] = useState([]);
+  
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
-
   const [form, setForm] = useState(FORM_VAZIO);
   const [editandoId, setEditandoId] = useState(null);
   const [confirmarExclusaoId, setConfirmarExclusaoId] = useState(null);
@@ -44,8 +44,8 @@ function GerenciarViagens() {
   const [alterandoStatusId, setAlterandoStatusId] = useState(null);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
 
-  // Busca barcos reais do banco para a dropdown
-  const carregarBarcos = () => {
+  // 1. Busca os barcos DIRETO DO MYSQL via PHP
+  const carregarBarcosDoBanco = () => {
     fetch(`${API_URL}/api/barcos.php`, { credentials: 'include' })
       .then((res) => res.json())
       .then((resposta) => {
@@ -56,15 +56,15 @@ function GerenciarViagens() {
             horarioPartida: b.horarioPartida ?? b.horario_partida,
             fotoUrl: b.fotoUrl ?? b.foto_url,
           }));
-          if (setListaBarcosStore) {
-            setListaBarcosStore(barcosFormatados);
-          }
+          // Salva SOMENTE no estado desta tela
+          setListaBarcos(barcosFormatados);
         }
       })
-      .catch(() => console.error('Erro ao buscar barcos para a lista'));
+      .catch((err) => console.error('Erro ao buscar barcos do MySQL:', err));
   };
 
-  const carregarViagens = () => {
+  // 2. Busca as viagens DIRETO DO MYSQL via PHP
+  const carregarViagensDoBanco = () => {
     setCarregando(true);
     fetch(`${API_URL}/api/viagens.php`, { credentials: 'include' })
       .then((res) => res.json())
@@ -79,20 +79,20 @@ function GerenciarViagens() {
             horarioChegada: v.horarioChegada ?? v.horario_chegada,
             dataViagem: v.dataViagem ?? v.data_viagem,
           }));
-
+          // Salva SOMENTE no estado desta tela
           setListaViagens(viagensFormatadas);
-          if (setListaViagensStore) {
-            setListaViagensStore(viagensFormatadas);
-          }
+        } else {
+          setErro(resposta.mensagem || 'Erro ao carregar viagens do banco');
         }
       })
-      .catch(() => setErro('Erro ao carregar viagens'))
+      .catch(() => setErro('Erro ao conectar com a API de viagens'))
       .finally(() => setCarregando(false));
   };
 
+  // Executa as buscas no banco toda vez que o componente for montado
   useEffect(() => {
-    carregarViagens();
-    carregarBarcos(); // Busca os barcos do MySQL sempre que entrar na tela
+    carregarBarcosDoBanco();
+    carregarViagensDoBanco();
   }, []);
 
   const handleChange = (campo, valor) => {
@@ -126,6 +126,7 @@ function GerenciarViagens() {
     });
   };
 
+  // POST/PUT no MySQL
   const handleSalvar = (evento) => {
     evento.preventDefault();
     if (!form.barcoId || !form.portoSaidaId || !form.portoChegadaId || !form.dataViagem) return;
@@ -146,12 +147,13 @@ function GerenciarViagens() {
           setEditandoId(null);
           setForm(FORM_VAZIO);
           setMostrarFormulario(false);
-          carregarViagens();
+          // Recarrega viagens do banco
+          carregarViagensDoBanco();
         } else {
           setErro(resposta.mensagem || 'Erro ao salvar');
         }
       })
-      .catch(() => setErro('Erro ao salvar viagem'));
+      .catch(() => setErro('Erro ao salvar viagem no banco'));
   };
 
   const handleEditar = (viagem) => {
@@ -168,6 +170,7 @@ function GerenciarViagens() {
     setMostrarFormulario(false);
   };
 
+  // DELETE no MySQL
   const handleExcluir = (id) => {
     setErro('');
     fetch(`${API_URL}/api/viagens.php`, {
@@ -181,14 +184,15 @@ function GerenciarViagens() {
         setConfirmarExclusaoId(null);
         if (resposta.sucesso) {
           if (editandoId === id) handleCancelar();
-          carregarViagens();
+          carregarViagensDoBanco(); // Recarrega do banco
         } else {
           setErro(resposta.mensagem || 'Erro ao excluir');
         }
       })
-      .catch(() => setErro('Erro ao excluir viagem'));
+      .catch(() => setErro('Erro ao excluir viagem do banco'));
   };
 
+  // PUT (Status) no MySQL
   const handleAlterarStatus = (id, novoStatus) => {
     fetch(`${API_URL}/api/viagens.php`, {
       method: 'PUT',
@@ -198,11 +202,12 @@ function GerenciarViagens() {
     })
       .then((res) => res.json())
       .then((resposta) => {
-        if (resposta.sucesso) carregarViagens();
+        if (resposta.sucesso) carregarViagensDoBanco(); // Recarrega do banco
       });
     setAlterandoStatusId(null);
   };
 
+  // POST (Duplicar) no MySQL
   const handleDuplicar = (viagem) => {
     const { id, ...dadosSemId } = viagem;
     fetch(`${API_URL}/api/viagens.php`, {
@@ -213,7 +218,7 @@ function GerenciarViagens() {
     })
       .then((res) => res.json())
       .then((resposta) => {
-        if (resposta.sucesso) carregarViagens();
+        if (resposta.sucesso) carregarViagensDoBanco(); // Recarrega do banco
       });
   };
 
@@ -222,7 +227,6 @@ function GerenciarViagens() {
   const nomeMunicipio = (id) => listaMunicipios.find((m) => String(m.id) === String(id))?.nome || 'indefinido';
 
   const rotuloCor = (status) => STATUS_OPCOES.find((s) => s.valor === status) || STATUS_OPCOES[1];
-
   const podeCriar = listaBarcos.length > 0 && listaPortos.length >= 2;
 
   return (
@@ -242,7 +246,7 @@ function GerenciarViagens() {
         </div>
       )}
 
-      {!podeCriar && (
+      {!podeCriar && !carregando && (
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-5 py-4">
           <p className="text-yellow-400 text-sm">
             Cadastre ao menos um barco e dois portos antes de criar viagens.
@@ -285,7 +289,7 @@ function GerenciarViagens() {
           </div>
 
           <div className="bg-[#041f43]/60 border border-white/10 rounded-xl p-4 space-y-3">
-            <p className="text-[#00D9E9] text-sm font-semibold">Porto de saida</p>
+            <p className="text-[#00D9E9] text-sm font-semibold">Porto de saída</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">Porto</label>
@@ -302,7 +306,7 @@ function GerenciarViagens() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Horario de partida</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Horário de partida</label>
                 <input
                   type="time"
                   value={form.horarioPartida}
@@ -315,7 +319,7 @@ function GerenciarViagens() {
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <p className="text-[#00D9E9] text-sm font-semibold">Paradas intermediarias</p>
+              <p className="text-[#00D9E9] text-sm font-semibold">Paradas intermediárias</p>
               <Button tipo="secondary" tamanho="small" onClick={adicionarParada}>
                 + Adicionar parada
               </Button>
@@ -340,7 +344,7 @@ function GerenciarViagens() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Municipio</label>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Município</label>
                     <select
                       value={parada.municipioId}
                       onChange={(e) => handleParada(indice, 'municipioId', e.target.value)}
@@ -390,7 +394,7 @@ function GerenciarViagens() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-1">Horario previsto de chegada</label>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Horário previsto de chegada</label>
                 <input
                   type="time"
                   value={form.horarioChegada}
@@ -424,7 +428,7 @@ function GerenciarViagens() {
 
           <div className="flex gap-2 pt-2">
             <Button type="submit" tipo="primary" tamanho="medium">
-              {editandoId ? 'Salvar edicao' : 'Concluir Cadastro'}
+              {editandoId ? 'Salvar edição' : 'Concluir Cadastro'}
             </Button>
             <Button tipo="secondary" tamanho="medium" onClick={handleCancelar}>
               Cancelar
@@ -434,7 +438,7 @@ function GerenciarViagens() {
       )}
 
       {carregando ? (
-        <p className="text-gray-500 text-sm">Carregando...</p>
+        <p className="text-gray-500 text-sm">Carregando dados do banco...</p>
       ) : listaViagens.length === 0 ? (
         <p className="text-gray-500 text-sm">Nenhuma viagem cadastrada ainda.</p>
       ) : (
@@ -525,7 +529,7 @@ function GerenciarViagens() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <p className="text-gray-400">Barco: <span className="text-gray-200">{nomeBarco(viagem.barcoId)}</span></p>
                       <p className="text-gray-400">Data: <span className="text-gray-200">{viagem.dataViagem}</span></p>
-                      <p className="text-gray-400">Saida: <span className="text-gray-200">{nomePorto(viagem.portoSaidaId)} {viagem.horarioPartida && '- ' + viagem.horarioPartida}</span></p>
+                      <p className="text-gray-400">Saída: <span className="text-gray-200">{nomePorto(viagem.portoSaidaId)} {viagem.horarioPartida && '- ' + viagem.horarioPartida}</span></p>
                       <p className="text-gray-400">Chegada: <span className="text-gray-200">{nomePorto(viagem.portoChegadaId)} {viagem.horarioChegada && '- ' + viagem.horarioChegada}</span></p>
                     </div>
 
