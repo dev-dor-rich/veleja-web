@@ -30,6 +30,7 @@ function GerenciarViagens() {
   const listaMunicipios = useDadosStore((s) => s.listaMunicipios);
   const listaPortos = useDadosStore((s) => s.listaPortos);
   const listaBarcos = useDadosStore((s) => s.listaBarcos);
+  const setListaBarcosStore = useDadosStore((s) => s.setListaBarcos);
   const setListaViagensStore = useDadosStore((s) => s.setListaViagens);
 
   const [listaViagens, setListaViagens] = useState([]);
@@ -43,13 +44,32 @@ function GerenciarViagens() {
   const [alterandoStatusId, setAlterandoStatusId] = useState(null);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
 
+  // Busca barcos reais do banco para a dropdown
+  const carregarBarcos = () => {
+    fetch(`${API_URL}/api/barcos.php`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) {
+          const barcosFormatados = resposta.dados.map((b) => ({
+            ...b,
+            capacidadeMaxima: b.capacidadeMaxima ?? b.capacidade_maxima,
+            horarioPartida: b.horarioPartida ?? b.horario_partida,
+            fotoUrl: b.fotoUrl ?? b.foto_url,
+          }));
+          if (setListaBarcosStore) {
+            setListaBarcosStore(barcosFormatados);
+          }
+        }
+      })
+      .catch(() => console.error('Erro ao buscar barcos para a lista'));
+  };
+
   const carregarViagens = () => {
     setCarregando(true);
     fetch(`${API_URL}/api/viagens.php`, { credentials: 'include' })
       .then((res) => res.json())
       .then((resposta) => {
         if (resposta.sucesso) {
-          // Mapeia chaves do banco para o padrão camelCase do React
           const viagensFormatadas = resposta.dados.map((v) => ({
             ...v,
             barcoId: v.barcoId ?? v.barco_id,
@@ -62,7 +82,7 @@ function GerenciarViagens() {
 
           setListaViagens(viagensFormatadas);
           if (setListaViagensStore) {
-            setListaViagensStore(viagensFormatadas); // Sincroniza com o Zustand para o BancoDados
+            setListaViagensStore(viagensFormatadas);
           }
         }
       })
@@ -72,6 +92,7 @@ function GerenciarViagens() {
 
   useEffect(() => {
     carregarViagens();
+    carregarBarcos(); // Busca os barcos do MySQL sempre que entrar na tela
   }, []);
 
   const handleChange = (campo, valor) => {
