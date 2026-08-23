@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useDadosStore from '../../../store/useDadosStore';
+
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:8000`
+  : 'https://veleja-site-production.up.railway.app';
 
 const STATUS_OPCOES = [
   { valor: 'confirmada', rotulo: 'Confirmada', cor: 'text-green-400', bg: 'bg-green-400/10 border-green-400/30' },
@@ -9,19 +13,50 @@ const STATUS_OPCOES = [
 ];
 
 function InformarViagem() {
-  const listaViagens = useDadosStore((s) => s.listaViagens);
   const listaBarcos = useDadosStore((s) => s.listaBarcos);
   const listaPortos = useDadosStore((s) => s.listaPortos);
-  const alterarStatusViagem = useDadosStore((s) => s.alterarStatusViagem);
 
+  const [listaViagens, setListaViagens] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState('');
   const [alterandoId, setAlterandoId] = useState(null);
+
+  const carregarViagens = () => {
+    setCarregando(true);
+    fetch(`${API_URL}/api/viagens.php`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) setListaViagens(resposta.dados);
+      })
+      .catch(() => setErro('Erro ao carregar viagens'))
+      .finally(() => setCarregando(false));
+  };
+
+  useEffect(() => {
+    carregarViagens();
+  }, []);
 
   const nomeBarco = (id) => listaBarcos.find((b) => b.id === id)?.nome || 'indefinido';
   const nomePorto = (id) => listaPortos.find((p) => p.id === id)?.nome || 'indefinido';
   const statusInfo = (status) => STATUS_OPCOES.find((s) => s.valor === status) || STATUS_OPCOES[1];
 
   const handleAlterarStatus = (viagemId, novoStatus) => {
-    alterarStatusViagem(viagemId, novoStatus);
+    setErro('');
+    fetch(`${API_URL}/api/viagens.php`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: viagemId, status: novoStatus, somenteStatus: true }),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) {
+          carregarViagens();
+        } else {
+          setErro(resposta.mensagem || 'Erro ao alterar status');
+        }
+      })
+      .catch(() => setErro('Erro ao alterar status'));
     setAlterandoId(null);
   };
 
@@ -34,7 +69,15 @@ function InformarViagem() {
         </p>
       </div>
 
-      {listaViagens.length === 0 ? (
+      {erro && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-3">
+          <p className="text-red-400 text-sm">{erro}</p>
+        </div>
+      )}
+
+      {carregando ? (
+        <p className="text-gray-500 text-sm">Carregando...</p>
+      ) : listaViagens.length === 0 ? (
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-5 py-4">
           <p className="text-yellow-400 text-sm">
             Nenhuma viagem cadastrada ainda. Crie viagens em Gerenciar Viagens primeiro.
@@ -51,7 +94,6 @@ function InformarViagem() {
                 key={viagem.id}
                 className="bg-[#0a2e5c] border border-white/10 rounded-xl px-5 py-4 space-y-3"
               >
-                {/* Cabecalho da viagem */}
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div>
                     <p className="text-white font-medium">{nomeBarco(viagem.barcoId)}</p>
@@ -61,13 +103,11 @@ function InformarViagem() {
                     <p className="text-gray-500 text-xs mt-1">{viagem.dataViagem}</p>
                   </div>
 
-                  {/* Badge de status atual */}
                   <span className={'text-xs font-semibold px-3 py-1 rounded-full border ' + info.cor + ' ' + info.bg}>
                     {info.rotulo}
                   </span>
                 </div>
 
-                {/* Botoes de status */}
                 {estaAlterando ? (
                   <div className="space-y-2">
                     <p className="text-gray-300 text-sm">Selecione o novo status:</p>

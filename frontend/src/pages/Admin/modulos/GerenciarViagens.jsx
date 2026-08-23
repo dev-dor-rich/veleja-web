@@ -1,6 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useDadosStore from '../../../store/useDadosStore';
 import Button from '../../../components/Button';
+
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:8000`
+  : 'https://veleja-site-production.up.railway.app';
 
 const STATUS_OPCOES = [
   { valor: 'confirmada', rotulo: 'Confirmada', cor: 'text-green-400' },
@@ -26,12 +30,10 @@ function GerenciarViagens() {
   const listaMunicipios = useDadosStore((s) => s.listaMunicipios);
   const listaPortos = useDadosStore((s) => s.listaPortos);
   const listaBarcos = useDadosStore((s) => s.listaBarcos);
-  const listaViagens = useDadosStore((s) => s.listaViagens);
-  const adicionarViagem = useDadosStore((s) => s.adicionarViagem);
-  const editarViagem = useDadosStore((s) => s.editarViagem);
-  const removerViagem = useDadosStore((s) => s.removerViagem);
-  const duplicarViagem = useDadosStore((s) => s.duplicarViagem);
-  const alterarStatusViagem = useDadosStore((s) => s.alterarStatusViagem);
+
+  const [listaViagens, setListaViagens] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState('');
 
   const [form, setForm] = useState(FORM_VAZIO);
   const [editandoId, setEditandoId] = useState(null);
@@ -40,16 +42,29 @@ function GerenciarViagens() {
   const [alterandoStatusId, setAlterandoStatusId] = useState(null);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
 
+  const carregarViagens = () => {
+    setCarregando(true);
+    fetch(`${API_URL}/api/viagens.php`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) setListaViagens(resposta.dados);
+      })
+      .catch(() => setErro('Erro ao carregar viagens'))
+      .finally(() => setCarregando(false));
+  };
+
+  useEffect(() => {
+    carregarViagens();
+  }, []);
+
   const handleChange = (campo, valor) => {
     setForm((anterior) => ({ ...anterior, [campo]: valor }));
   };
 
-  // Filtra portos pelo municipio selecionado numa parada
   const portosDoMunicipio = (municipioId) => {
     return listaPortos.filter((p) => p.municipioId === municipioId);
   };
 
-  // Adiciona uma parada vazia no final da lista
   const adicionarParada = () => {
     setForm((anterior) => ({
       ...anterior,
@@ -57,7 +72,6 @@ function GerenciarViagens() {
     }));
   };
 
-  // Remove uma parada pelo indice
   const removerParada = (indice) => {
     setForm((anterior) => ({
       ...anterior,
@@ -65,12 +79,10 @@ function GerenciarViagens() {
     }));
   };
 
-  // Atualiza um campo de uma parada especifica
   const handleParada = (indice, campo, valor) => {
     setForm((anterior) => {
       const novasParadas = [...anterior.paradas];
       novasParadas[indice] = { ...novasParadas[indice], [campo]: valor };
-      // Se mudou o municipio, limpa o porto da parada
       if (campo === 'municipioId') novasParadas[indice].portoId = '';
       return { ...anterior, paradas: novasParadas };
     });
@@ -79,16 +91,29 @@ function GerenciarViagens() {
   const handleSalvar = (evento) => {
     evento.preventDefault();
     if (!form.barcoId || !form.portoSaidaId || !form.portoChegadaId || !form.dataViagem) return;
+    setErro('');
 
-    if (editandoId) {
-      editarViagem(editandoId, form);
-      setEditandoId(null);
-    } else {
-      adicionarViagem(form);
-    }
+    const metodo = editandoId ? 'PUT' : 'POST';
+    const corpo = { ...(editandoId ? { id: editandoId } : {}), ...form };
 
-    setForm(FORM_VAZIO);
-    setMostrarFormulario(false);
+    fetch(`${API_URL}/api/viagens.php`, {
+      method: metodo,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) {
+          setEditandoId(null);
+          setForm(FORM_VAZIO);
+          setMostrarFormulario(false);
+          carregarViagens();
+        } else {
+          setErro(resposta.mensagem || 'Erro ao salvar');
+        }
+      })
+      .catch(() => setErro('Erro ao salvar viagem'));
   };
 
   const handleEditar = (viagem) => {
@@ -106,12 +131,54 @@ function GerenciarViagens() {
   };
 
   const handleExcluir = (id) => {
-    removerViagem(id);
-    setConfirmarExclusaoId(null);
-    if (editandoId === id) handleCancelar();
+    setErro('');
+    fetch(`${API_URL}/api/viagens.php`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        setConfirmarExclusaoId(null);
+        if (resposta.sucesso) {
+          if (editandoId === id) handleCancelar();
+          carregarViagens();
+        } else {
+          setErro(resposta.mensagem || 'Erro ao excluir');
+        }
+      })
+      .catch(() => setErro('Erro ao excluir viagem'));
   };
 
-  // Helpers pra exibir nomes na listagem
+  const handleAlterarStatus = (id, novoStatus) => {
+    fetch(`${API_URL}/api/viagens.php`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: novoStatus, somenteStatus: true }),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) carregarViagens();
+      });
+    setAlterandoStatusId(null);
+  };
+
+  const handleDuplicar = (viagem) => {
+    const { id, ...dadosSemId } = viagem;
+    fetch(`${API_URL}/api/viagens.php`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dadosSemId),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) carregarViagens();
+      });
+  };
+
   const nomeBarco = (id) => listaBarcos.find((b) => b.id === id)?.nome || 'indefinido';
   const nomePorto = (id) => listaPortos.find((p) => p.id === id)?.nome || 'indefinido';
   const nomeMunicipio = (id) => listaMunicipios.find((m) => m.id === id)?.nome || 'indefinido';
@@ -131,6 +198,12 @@ function GerenciarViagens() {
         )}
       </div>
 
+      {erro && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-3">
+          <p className="text-red-400 text-sm">{erro}</p>
+        </div>
+      )}
+
       {!podeCriar && (
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-5 py-4">
           <p className="text-yellow-400 text-sm">
@@ -139,14 +212,12 @@ function GerenciarViagens() {
         </div>
       )}
 
-      {/* Formulario de criacao/edicao */}
       {mostrarFormulario && (
         <form onSubmit={handleSalvar} className="bg-[#0a2e5c] border border-white/10 rounded-xl p-5 space-y-6">
           <h3 className="text-white font-semibold">
             {editandoId ? 'Editando viagem' : 'Nova viagem'}
           </h3>
 
-          {/* Barco */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Barco</label>
             <select
@@ -162,7 +233,6 @@ function GerenciarViagens() {
             </select>
           </div>
 
-          {/* Data */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Data da viagem</label>
             <input
@@ -174,7 +244,6 @@ function GerenciarViagens() {
             />
           </div>
 
-          {/* Porto de saida + horario */}
           <div className="bg-[#041f43]/60 border border-white/10 rounded-xl p-4 space-y-3">
             <p className="text-[#00D9E9] text-sm font-semibold">Porto de saida</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -204,7 +273,6 @@ function GerenciarViagens() {
             </div>
           </div>
 
-          {/* Paradas intermediarias */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-[#00D9E9] text-sm font-semibold">Paradas intermediarias</p>
@@ -264,7 +332,6 @@ function GerenciarViagens() {
             ))}
           </div>
 
-          {/* Porto de chegada + horario */}
           <div className="bg-[#041f43]/60 border border-white/10 rounded-xl p-4 space-y-3">
             <p className="text-[#00D9E9] text-sm font-semibold">Porto de chegada</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -294,7 +361,6 @@ function GerenciarViagens() {
             </div>
           </div>
 
-          {/* Status */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Status da viagem</label>
             <div className="flex flex-wrap gap-2">
@@ -316,7 +382,6 @@ function GerenciarViagens() {
             </div>
           </div>
 
-          {/* Botoes */}
           <div className="flex gap-2 pt-2">
             <Button type="submit" tipo="primary" tamanho="medium">
               {editandoId ? 'Salvar edicao' : 'Concluir Cadastro'}
@@ -328,8 +393,9 @@ function GerenciarViagens() {
         </form>
       )}
 
-      {/* Lista de viagens */}
-      {listaViagens.length === 0 ? (
+      {carregando ? (
+        <p className="text-gray-500 text-sm">Carregando...</p>
+      ) : listaViagens.length === 0 ? (
         <p className="text-gray-500 text-sm">Nenhuma viagem cadastrada ainda.</p>
       ) : (
         <ul className="space-y-2">
@@ -368,7 +434,7 @@ function GerenciarViagens() {
                       Editar
                     </Button>
 
-                    <Button tipo="secondary" tamanho="small" onClick={() => duplicarViagem(viagem.id)}>
+                    <Button tipo="secondary" tamanho="small" onClick={() => handleDuplicar(viagem)}>
                       Duplicar
                     </Button>
 
@@ -377,10 +443,7 @@ function GerenciarViagens() {
                         {STATUS_OPCOES.map((opcao) => (
                           <button
                             key={opcao.valor}
-                            onClick={() => {
-                              alterarStatusViagem(viagem.id, opcao.valor);
-                              setAlterandoStatusId(null);
-                            }}
+                            onClick={() => handleAlterarStatus(viagem.id, opcao.valor)}
                             className={'text-xs px-2 py-1 rounded-full ' + opcao.cor + ' bg-white/10 hover:bg-white/20'}
                           >
                             {opcao.rotulo}
@@ -417,7 +480,6 @@ function GerenciarViagens() {
                   </div>
                 </div>
 
-                {/* Detalhes expandidos */}
                 {expandidoId === viagem.id && (
                   <div className="border-t border-white/10 px-5 py-4 space-y-3 text-sm">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -433,7 +495,7 @@ function GerenciarViagens() {
                         <ul className="space-y-1">
                           {viagem.paradas.map((parada, i) => (
                             <li key={i} className="text-gray-200 text-xs">
-                              Parada {i + 1}: {nomeMunicipio(parada.municipioId)} - {nomePorto(parada.portoId)}
+                              Parada {i + 1}: {nomePorto(parada.portoId)}
                             </li>
                           ))}
                         </ul>
