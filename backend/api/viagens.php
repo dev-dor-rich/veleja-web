@@ -30,15 +30,13 @@ require dirname(__DIR__) . '/config/database.php';
 $metodo = $_SERVER['REQUEST_METHOD'];
 
 function buscarParadas($conexao, $viagemId) {
-    $stmt = $conexao->prepare(
-        "SELECT porto_id FROM viagem_paradas WHERE viagem_id = ? ORDER BY ordem ASC"
-    );
+    $stmt = $conexao->prepare("SELECT id, porto_id as portoId FROM viagem_paradas WHERE viagem_id = ? ORDER BY ordem ASC");
     $stmt->bind_param('i', $viagemId);
     $stmt->execute();
-    $resultado = $stmt->get_result();
+    $res = $stmt->get_result();
     $paradas = [];
-    while ($linha = $resultado->fetch_assoc()) {
-        $paradas[] = ['portoId' => (int)$linha['porto_id']];
+    while ($p = $res->fetch_assoc()) {
+        $paradas[] = $p;
     }
     $stmt->close();
     return $paradas;
@@ -52,49 +50,37 @@ function salvarParadas($conexao, $viagemId, $paradas) {
 
     if (empty($paradas)) return;
 
-    $stmt = $conexao->prepare(
-        "INSERT INTO viagem_paradas (viagem_id, porto_id, ordem) VALUES (?, ?, ?)"
-    );
-    $ordem = 0;
-    foreach ($paradas as $parada) {
+    $stmt = $conexao->prepare("INSERT INTO viagem_paradas (viagem_id, porto_id, ordem) VALUES (?, ?, ?)");
+    foreach ($paradas as $ordem => $parada) {
         $portoId = (int)($parada['portoId'] ?? 0);
-        if (empty($portoId)) continue;
-        $stmt->bind_param('iii', $viagemId, $portoId, $ordem);
-        $stmt->execute();
-        $ordem++;
+        if ($portoId > 0) {
+            $stmt->bind_param('iii', $viagemId, $portoId, $ordem);
+            $stmt->execute();
+        }
     }
     $stmt->close();
 }
 
-// LISTAR
+// LISTAR VIAGENS
 if ($metodo === 'GET') {
-    $resultado = $conexao->query(
-        "SELECT id, barco_id, porto_saida_id, horario_partida, porto_chegada_id,
-                horario_chegada, data_viagem, status
-         FROM viagens ORDER BY data_viagem DESC, id DESC"
-    );
+    $sql = "SELECT id, barco_id as barcoId, porto_saida_id as portoSaidaId, horario_partida as horarioPartida,
+                   porto_chegada_id as portoChegadaId, horario_chegada as horarioChegada,
+                   data_viagem as dataViagem, status FROM viagens ORDER BY data_viagem DESC";
+    
+    $resultado = $conexao->query($sql);
     $viagens = [];
-    while ($linha = $resultado->fetch_assoc()) {
-        $viagens[] = [
-            'id' => (int)$linha['id'],
-            'barcoId' => (int)$linha['barco_id'],
-            'portoSaidaId' => (int)$linha['porto_saida_id'],
-            'horarioPartida' => $linha['horario_partida'],
-            'portoChegadaId' => (int)$linha['porto_chegada_id'],
-            'horarioChegada' => $linha['horario_chegada'],
-            'dataViagem' => $linha['data_viagem'],
-            'status' => $linha['status'],
-            'paradas' => buscarParadas($conexao, $linha['id']),
-        ];
+    while ($v = $resultado->fetch_assoc()) {
+        $v['paradas'] = buscarParadas($conexao, $v['id']);
+        $viagens[] = $v;
     }
     echo json_encode(['sucesso' => true, 'dados' => $viagens]);
     exit();
 }
 
-// CRIAR
+// CRIAR VIAGEM
 if ($metodo === 'POST') {
     $d = json_decode(file_get_contents('php://input'), true);
-
+    
     $barcoId = (int)($d['barcoId'] ?? 0);
     $portoSaidaId = (int)($d['portoSaidaId'] ?? 0);
     $horarioPartida = trim($d['horarioPartida'] ?? '') ?: null;
@@ -104,14 +90,14 @@ if ($metodo === 'POST') {
     $status = trim($d['status'] ?? 'a-confirmar');
     $paradas = $d['paradas'] ?? [];
 
-    if (empty($barcoId) || empty($portoSaidaId) || empty($portoChegadaId) || empty($dataViagem)) {
+    if (!$barcoId || !$portoSaidaId || !$portoChegadaId || empty($dataViagem)) {
         http_response_code(400);
-        echo json_encode(['sucesso' => false, 'mensagem' => 'Barco, portos e data são obrigatórios']);
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Dados obrigatórios faltando']);
         exit();
     }
 
     $stmt = $conexao->prepare(
-        "INSERT INTO viagens (barco_id, porto_saida_id, horario_partida, porto_chegada_id, horario_chegada, data_viagem, status)
+        "INSERT INTO viagens (barco_id, porto_saida_id, horario_partida, porto_chegada_id, horario_chegada, data_viagem, status) 
          VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
     $stmt->bind_param('iisisss', $barcoId, $portoSaidaId, $horarioPartida, $portoChegadaId, $horarioChegada, $dataViagem, $status);
@@ -122,40 +108,37 @@ if ($metodo === 'POST') {
         echo json_encode(['sucesso' => true, 'dados' => ['id' => $viagemId]]);
     } else {
         http_response_code(500);
-        echo json_encode(['sucesso' => false, 'mensagem' => 'Erro ao cadastrar viagem']);
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Erro ao salvar viagem no banco']);
     }
     $stmt->close();
     exit();
 }
 
-// EDITAR (edição completa OU alteração rápida de status)
+// EDITAR VIAGEM / ALTERAR STATUS
 if ($metodo === 'PUT') {
     $d = json_decode(file_get_contents('php://input'), true);
     $id = (int)($d['id'] ?? 0);
 
-    if (empty($id)) {
+    if (!$id) {
         http_response_code(400);
-        echo json_encode(['sucesso' => false, 'mensagem' => 'ID é obrigatório']);
+        echo json_encode(['sucesso' => false, 'mensagem' => 'ID da viagem é obrigatório']);
         exit();
     }
 
-    // Alteração rápida: só status, sem os outros campos
-    if (isset($d['somenteStatus']) && $d['somenteStatus'] === true) {
-        $status = trim($d['status'] ?? '');
-        if (empty($status)) {
-            http_response_code(400);
-            echo json_encode(['sucesso' => false, 'mensagem' => 'Status é obrigatório']);
-            exit();
-        }
+    if (!empty($d['somenteStatus'])) {
+        $status = trim($d['status'] ?? 'a-confirmar');
         $stmt = $conexao->prepare("UPDATE viagens SET status = ? WHERE id = ?");
         $stmt->bind_param('si', $status, $id);
-        $stmt->execute();
+        if ($stmt->execute()) {
+            echo json_encode(['sucesso' => true]);
+        } else {
+            http_response_code(500);
+            echo json_encode(['sucesso' => false, 'mensagem' => 'Erro ao alterar status']);
+        }
         $stmt->close();
-        echo json_encode(['sucesso' => true]);
         exit();
     }
 
-    // Edição completa
     $barcoId = (int)($d['barcoId'] ?? 0);
     $portoSaidaId = (int)($d['portoSaidaId'] ?? 0);
     $horarioPartida = trim($d['horarioPartida'] ?? '') ?: null;
@@ -165,36 +148,28 @@ if ($metodo === 'PUT') {
     $status = trim($d['status'] ?? 'a-confirmar');
     $paradas = $d['paradas'] ?? [];
 
-    if (empty($barcoId) || empty($portoSaidaId) || empty($portoChegadaId) || empty($dataViagem)) {
-        http_response_code(400);
-        echo json_encode(['sucesso' => false, 'mensagem' => 'Barco, portos e data são obrigatórios']);
-        exit();
-    }
-
     $stmt = $conexao->prepare(
-        "UPDATE viagens SET barco_id = ?, porto_saida_id = ?, horario_partida = ?,
-         porto_chegada_id = ?, horario_chegada = ?, data_viagem = ?, status = ? WHERE id = ?"
+        "UPDATE viagens SET barco_id = ?, porto_saida_id = ?, horario_partida = ?, porto_chegada_id = ?, horario_chegada = ?, data_viagem = ?, status = ? WHERE id = ?"
     );
-    $stmt->bind_param('iisissi', $barcoId, $portoSaidaId, $horarioPartida, $portoChegadaId, $horarioChegada, $dataViagem, $status);
-    // nota: 'i' 'i' 's' 'i' 's' 's' 's' 'i' -> ajustar tipos abaixo
+    $stmt->bind_param('iisisssi', $barcoId, $portoSaidaId, $horarioPartida, $portoChegadaId, $horarioChegada, $dataViagem, $status, $id);
 
     if ($stmt->execute()) {
         salvarParadas($conexao, $id, $paradas);
         echo json_encode(['sucesso' => true]);
     } else {
         http_response_code(500);
-        echo json_encode(['sucesso' => false, 'mensagem' => 'Erro ao editar viagem']);
+        echo json_encode(['sucesso' => false, 'mensagem' => 'Erro ao atualizar viagem']);
     }
     $stmt->close();
     exit();
 }
 
-// EXCLUIR
+// EXCLUIR VIAGEM
 if ($metodo === 'DELETE') {
     $d = json_decode(file_get_contents('php://input'), true);
     $id = (int)($d['id'] ?? 0);
 
-    if (empty($id)) {
+    if (!$id) {
         http_response_code(400);
         echo json_encode(['sucesso' => false, 'mensagem' => 'ID é obrigatório']);
         exit();

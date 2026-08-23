@@ -30,6 +30,7 @@ function GerenciarViagens() {
   const listaMunicipios = useDadosStore((s) => s.listaMunicipios);
   const listaPortos = useDadosStore((s) => s.listaPortos);
   const listaBarcos = useDadosStore((s) => s.listaBarcos);
+  const setListaViagensStore = useDadosStore((s) => s.setListaViagens);
 
   const [listaViagens, setListaViagens] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -47,7 +48,23 @@ function GerenciarViagens() {
     fetch(`${API_URL}/api/viagens.php`, { credentials: 'include' })
       .then((res) => res.json())
       .then((resposta) => {
-        if (resposta.sucesso) setListaViagens(resposta.dados);
+        if (resposta.sucesso) {
+          // Mapeia chaves do banco para o padrão camelCase do React
+          const viagensFormatadas = resposta.dados.map((v) => ({
+            ...v,
+            barcoId: v.barcoId ?? v.barco_id,
+            portoSaidaId: v.portoSaidaId ?? v.porto_saida_id,
+            horarioPartida: v.horarioPartida ?? v.horario_partida,
+            portoChegadaId: v.portoChegadaId ?? v.porto_chegada_id,
+            horarioChegada: v.horarioChegada ?? v.horario_chegada,
+            dataViagem: v.dataViagem ?? v.data_viagem,
+          }));
+
+          setListaViagens(viagensFormatadas);
+          if (setListaViagensStore) {
+            setListaViagensStore(viagensFormatadas); // Sincroniza com o Zustand para o BancoDados
+          }
+        }
       })
       .catch(() => setErro('Erro ao carregar viagens'))
       .finally(() => setCarregando(false));
@@ -62,7 +79,7 @@ function GerenciarViagens() {
   };
 
   const portosDoMunicipio = (municipioId) => {
-    return listaPortos.filter((p) => p.municipioId === municipioId);
+    return listaPortos.filter((p) => String(p.municipioId) === String(municipioId));
   };
 
   const adicionarParada = () => {
@@ -179,9 +196,9 @@ function GerenciarViagens() {
       });
   };
 
-  const nomeBarco = (id) => listaBarcos.find((b) => b.id === id)?.nome || 'indefinido';
-  const nomePorto = (id) => listaPortos.find((p) => p.id === id)?.nome || 'indefinido';
-  const nomeMunicipio = (id) => listaMunicipios.find((m) => m.id === id)?.nome || 'indefinido';
+  const nomeBarco = (id) => listaBarcos.find((b) => String(b.id) === String(id))?.nome || 'indefinido';
+  const nomePorto = (id) => listaPortos.find((p) => String(p.id) === String(id))?.nome || 'indefinido';
+  const nomeMunicipio = (id) => listaMunicipios.find((m) => String(m.id) === String(id))?.nome || 'indefinido';
 
   const rotuloCor = (status) => STATUS_OPCOES.find((s) => s.valor === status) || STATUS_OPCOES[1];
 
@@ -228,7 +245,9 @@ function GerenciarViagens() {
             >
               <option value="">Selecione um barco</option>
               {listaBarcos.map((b) => (
-                <option key={b.id} value={b.id}>{b.nome} ({b.capacidadeMaxima} passageiros)</option>
+                <option key={b.id} value={b.id}>
+                  {b.nome} ({b.capacidadeMaxima ?? b.capacidade_maxima} passageiros)
+                </option>
               ))}
             </select>
           </div>

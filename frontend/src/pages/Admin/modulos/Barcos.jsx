@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Button from '../../../components/Button';
+import useDadosStore from '../../../store/useDadosStore';
 
 const SERVICOS_DISPONIVEIS = ['Rede', 'Camarote', 'Lanchonete', 'Banheiro', 'Ar-condicionado', 'Wi-Fi', 'Outros'];
 
@@ -16,6 +17,8 @@ const API_URL = window.location.hostname === 'localhost' || window.location.host
   : 'https://veleja-site-production.up.railway.app';
 
 function Barcos() {
+  const setListaBarcosStore = useDadosStore((s) => s.setListaBarcos);
+
   const [listaBarcos, setListaBarcos] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -31,7 +34,20 @@ function Barcos() {
     fetch(`${API_URL}/api/barcos.php`, { credentials: 'include' })
       .then((res) => res.json())
       .then((resposta) => {
-        if (resposta.sucesso) setListaBarcos(resposta.dados);
+        if (resposta.sucesso) {
+          // Mapeia os nomes das colunas do banco (snake_case) para camelCase do React
+          const barcosFormatados = resposta.dados.map((b) => ({
+            ...b,
+            capacidadeMaxima: b.capacidadeMaxima ?? b.capacidade_maxima,
+            horarioPartida: b.horarioPartida ?? b.horario_partida,
+            fotoUrl: b.fotoUrl ?? b.foto_url,
+          }));
+
+          setListaBarcos(barcosFormatados);
+          if (setListaBarcosStore) {
+            setListaBarcosStore(barcosFormatados); // Sincroniza com o Zustand para o BancoDados e GerenciarViagens
+          }
+        }
       })
       .catch(() => setErro('Erro ao carregar barcos'))
       .finally(() => setCarregando(false));
@@ -73,12 +89,12 @@ function Barcos() {
     setEditandoId(barco.id);
     setForm({
       nome: barco.nome,
-      capacidadeMaxima: String(barco.capacidade_maxima ?? ''),
+      capacidadeMaxima: String(barco.capacidadeMaxima ?? barco.capacidade_maxima ?? ''),
       servicos: barco.servicos ?? [],
-      horarioPartida: barco.horario_partida ?? '',
-      fotoUrl: barco.foto_url ?? null,
+      horarioPartida: barco.horarioPartida ?? barco.horario_partida ?? '',
+      fotoUrl: barco.fotoUrl ?? barco.foto_url ?? null,
     });
-    setPreviewFoto(barco.foto_url || null);
+    setPreviewFoto(barco.fotoUrl || barco.foto_url || null);
     setConfirmarExclusaoId(null);
     setExpandidoId(null);
   };
@@ -261,8 +277,8 @@ function Barcos() {
             >
               <div className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-3">
-                  {barco.foto_url ? (
-                    <img src={barco.foto_url} alt={barco.nome} className="h-12 w-16 rounded object-cover" />
+                  {(barco.fotoUrl || barco.foto_url) ? (
+                    <img src={barco.fotoUrl || barco.foto_url} alt={barco.nome} className="h-12 w-16 rounded object-cover" />
                   ) : (
                     <div className="h-12 w-16 rounded bg-gradient-to-br from-[#00D9E9] to-[#2FA89F] flex items-center justify-center text-2xl">
                       <span>&#9975;</span>
@@ -270,7 +286,7 @@ function Barcos() {
                   )}
                   <div>
                     <p className="text-white font-medium">{barco.nome}</p>
-                    <p className="text-gray-400 text-sm">{barco.capacidade_maxima} passageiros</p>
+                    <p className="text-gray-400 text-sm">{(barco.capacidadeMaxima ?? barco.capacidade_maxima)} passageiros</p>
                   </div>
                 </div>
 
@@ -308,7 +324,7 @@ function Barcos() {
 
               {expandidoId === barco.id && (
                 <div className="border-t border-white/10 px-5 py-4 space-y-2 text-sm">
-                  <p className="text-gray-400">Horario de partida: <span className="text-gray-200">{barco.horario_partida || 'nao informado'}</span></p>
+                  <p className="text-gray-400">Horario de partida: <span className="text-gray-200">{(barco.horarioPartida || barco.horario_partida) || 'nao informado'}</span></p>
                   <div>
                     <p className="text-gray-400 mb-1">Servicos:</p>
                     <div className="flex flex-wrap gap-1.5">
