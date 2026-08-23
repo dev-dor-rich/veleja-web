@@ -67,7 +67,7 @@ function salvarServicosDoBarco($conexao, $barcoId, $nomesServicos) {
 
 // LISTAR
 if ($metodo === 'GET') {
-    $resultado = $conexao->query("SELECT id, nome, capacidade_max, horario_partida, foto_url FROM barcos ORDER BY nome ASC");
+    $resultado = $conexao->query("SELECT id, nome, capacidade_maxima, horario_partida, foto_url FROM barcos ORDER BY nome ASC");
     $barcos = [];
     while ($linha = $resultado->fetch_assoc()) {
         $linha['servicos'] = buscarServicosDoBarco($conexao, $linha['id']);
@@ -93,7 +93,7 @@ if ($metodo === 'POST') {
     }
 
     $stmt = $conexao->prepare(
-        "INSERT INTO barcos (nome, capacidade_max, horario_partida, foto_url) VALUES (?, ?, ?, ?)"
+        "INSERT INTO barcos (nome, capacidade_maxima, horario_partida, foto_url) VALUES (?, ?, ?, ?)"
     );
     $stmt->bind_param('siss', $nome, $capacidade, $horarioPartida, $fotoUrl);
 
@@ -126,7 +126,7 @@ if ($metodo === 'PUT') {
     }
 
     $stmt = $conexao->prepare(
-        "UPDATE barcos SET nome = ?, capacidade_max = ?, horario_partida = ?, foto_url = ? WHERE id = ?"
+        "UPDATE barcos SET nome = ?, capacidade_maxima = ?, horario_partida = ?, foto_url = ? WHERE id = ?"
     );
     $stmt->bind_param('sissi', $nome, $capacidade, $horarioPartida, $fotoUrl, $id);
 
