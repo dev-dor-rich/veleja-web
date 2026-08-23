@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Button from '../../../components/Button';
-import useDadosStore from '../../../store/useDadosStore';
+// useDadosStore REMOVIDO: O componente agora foca 100% no MySQL
 
 const SERVICOS_DISPONIVEIS = ['Rede', 'Camarote', 'Lanchonete', 'Banheiro', 'Ar-condicionado', 'Wi-Fi', 'Outros'];
 
@@ -17,8 +17,6 @@ const API_URL = window.location.hostname === 'localhost' || window.location.host
   : 'https://veleja-site-production.up.railway.app';
 
 function Barcos() {
-  const setListaBarcosStore = useDadosStore((s) => s.setListaBarcos);
-
   const [listaBarcos, setListaBarcos] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
@@ -35,21 +33,22 @@ function Barcos() {
       .then((res) => res.json())
       .then((resposta) => {
         if (resposta.sucesso) {
-          // Mapeia os nomes das colunas do banco (snake_case) para camelCase do React
+          // Normalizando 100% para o padrão que o React espera
           const barcosFormatados = resposta.dados.map((b) => ({
-            ...b,
-            capacidadeMaxima: b.capacidadeMaxima ?? b.capacidade_maxima,
-            horarioPartida: b.horarioPartida ?? b.horario_partida,
-            fotoUrl: b.fotoUrl ?? b.foto_url,
+            id: b.id,
+            nome: b.nome,
+            capacidadeMaxima: b.capacidade_maxima, 
+            horarioPartida: b.horario_partida || '',
+            fotoUrl: b.foto_url || null,
+            servicos: b.servicos || [],
           }));
-
           setListaBarcos(barcosFormatados);
-          if (setListaBarcosStore) {
-            setListaBarcosStore(barcosFormatados); // Sincroniza com o Zustand para o BancoDados e GerenciarViagens
-          }
         }
       })
-      .catch(() => setErro('Erro ao carregar barcos'))
+      .catch((err) => {
+        console.error('Erro ao carregar barcos:', err);
+        setErro('Erro de conexão ao carregar barcos');
+      })
       .finally(() => setCarregando(false));
   };
 
@@ -78,7 +77,7 @@ function Barcos() {
     if (!arquivo) return;
     const leitor = new FileReader();
     leitor.onload = (e) => {
-      const url = e.target.result;
+      const url = e.target.result; // ATENÇÃO: Isso gera um Base64 enorme. A coluna no MySQL deve ser LONGTEXT.
       setPreviewFoto(url);
       setForm((anterior) => ({ ...anterior, fotoUrl: url }));
     };
@@ -89,19 +88,24 @@ function Barcos() {
     setEditandoId(barco.id);
     setForm({
       nome: barco.nome,
-      capacidadeMaxima: String(barco.capacidadeMaxima ?? barco.capacidade_maxima ?? ''),
-      servicos: barco.servicos ?? [],
-      horarioPartida: barco.horarioPartida ?? barco.horario_partida ?? '',
-      fotoUrl: barco.fotoUrl ?? barco.foto_url ?? null,
+      capacidadeMaxima: String(barco.capacidadeMaxima || ''),
+      servicos: barco.servicos || [],
+      horarioPartida: barco.horarioPartida || '',
+      fotoUrl: barco.fotoUrl || null,
     });
-    setPreviewFoto(barco.fotoUrl || barco.foto_url || null);
+    setPreviewFoto(barco.fotoUrl || null);
     setConfirmarExclusaoId(null);
     setExpandidoId(null);
   };
 
   const handleSalvar = (evento) => {
     evento.preventDefault();
-    if (!form.nome.trim() || !form.capacidadeMaxima) return;
+    
+    // Mostrando o erro na tela caso os campos não sejam preenchidos
+    if (!form.nome.trim() || !form.capacidadeMaxima) {
+      setErro("Por favor, preencha o nome e a capacidade do barco.");
+      return;
+    }
     setErro('');
 
     const metodo = editandoId ? 'PUT' : 'POST';
@@ -110,7 +114,7 @@ function Barcos() {
       nome: form.nome.trim(),
       capacidadeMaxima: parseInt(form.capacidadeMaxima, 10),
       servicos: form.servicos,
-      horarioPartida: form.horarioPartida || null,
+      horarioPartida: form.horarioPartida !== '' ? form.horarioPartida : null,
       fotoUrl: form.fotoUrl || null,
     };
 
@@ -128,16 +132,20 @@ function Barcos() {
           setPreviewFoto(null);
           carregarBarcos();
         } else {
-          setErro(resposta.mensagem || 'Erro ao salvar');
+          setErro(resposta.mensagem || 'Erro da API ao salvar barco');
         }
       })
-      .catch(() => setErro('Erro ao salvar barco'));
+      .catch((err) => {
+        console.error("Erro no fetch de salvar barco:", err);
+        setErro('Erro de conexão ao tentar salvar o barco');
+      });
   };
 
   const handleCancelar = () => {
     setEditandoId(null);
     setForm(FORM_VAZIO);
     setPreviewFoto(null);
+    setErro('');
   };
 
   const handleExcluir = (id) => {
@@ -155,7 +163,7 @@ function Barcos() {
           if (editandoId === id) handleCancelar();
           carregarBarcos();
         } else {
-          setErro(resposta.mensagem || 'Erro ao excluir');
+          setErro(resposta.mensagem || 'Erro ao excluir barco');
         }
       })
       .catch(() => setErro('Erro ao excluir barco'));
@@ -262,7 +270,7 @@ function Barcos() {
       </form>
 
       {carregando ? (
-        <p className="text-gray-500 text-sm">Carregando...</p>
+        <p className="text-gray-500 text-sm">Carregando dados do banco...</p>
       ) : listaBarcos.length === 0 ? (
         <p className="text-gray-500 text-sm">Nenhum barco cadastrado ainda.</p>
       ) : (
@@ -277,8 +285,8 @@ function Barcos() {
             >
               <div className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-3">
-                  {(barco.fotoUrl || barco.foto_url) ? (
-                    <img src={barco.fotoUrl || barco.foto_url} alt={barco.nome} className="h-12 w-16 rounded object-cover" />
+                  {barco.fotoUrl ? (
+                    <img src={barco.fotoUrl} alt={barco.nome} className="h-12 w-16 rounded object-cover" />
                   ) : (
                     <div className="h-12 w-16 rounded bg-gradient-to-br from-[#00D9E9] to-[#2FA89F] flex items-center justify-center text-2xl">
                       <span>&#9975;</span>
@@ -286,7 +294,7 @@ function Barcos() {
                   )}
                   <div>
                     <p className="text-white font-medium">{barco.nome}</p>
-                    <p className="text-gray-400 text-sm">{(barco.capacidadeMaxima ?? barco.capacidade_maxima)} passageiros</p>
+                    <p className="text-gray-400 text-sm">{barco.capacidadeMaxima} passageiros</p>
                   </div>
                 </div>
 
@@ -324,7 +332,7 @@ function Barcos() {
 
               {expandidoId === barco.id && (
                 <div className="border-t border-white/10 px-5 py-4 space-y-2 text-sm">
-                  <p className="text-gray-400">Horario de partida: <span className="text-gray-200">{(barco.horarioPartida || barco.horario_partida) || 'nao informado'}</span></p>
+                  <p className="text-gray-400">Horario de partida: <span className="text-gray-200">{barco.horarioPartida || 'nao informado'}</span></p>
                   <div>
                     <p className="text-gray-400 mb-1">Servicos:</p>
                     <div className="flex flex-wrap gap-1.5">
