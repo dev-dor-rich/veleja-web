@@ -1,6 +1,10 @@
 import { useParams, Link } from 'react-router-dom';
-import useDadosStore from '../../store/useDadosStore';
+import { useState, useEffect } from 'react';
 import logo from '../../assets/logo.svg';
+
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:8000`
+  : 'https://veleja-site-production.up.railway.app';
 
 const STATUS_INFO = {
   'confirmada': { rotulo: 'Confirmada', cor: 'text-green-400', bg: 'bg-green-400/10 border-green-400/30' },
@@ -11,38 +15,87 @@ const STATUS_INFO = {
 
 function BarcoDetalhes() {
   const { id } = useParams();
-  const listaViagens = useDadosStore((s) => s.listaViagens);
-  const listaBarcos = useDadosStore((s) => s.listaBarcos);
-  const listaPortos = useDadosStore((s) => s.listaPortos);
-  const listaMunicipios = useDadosStore((s) => s.listaMunicipios);
 
-  const viagem = listaViagens.find((v) => v.id === id);
+  const [viagem, setViagem] = useState(null);
+  const [barco, setBarco] = useState(null);
+  const [listaPortos, setListaPortos] = useState([]);
+  const [listaMunicipios, setListaMunicipios] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState('');
 
-  if (!viagem) {
-    return (
-      <div className="min-h-[calc(100vh-64px)] flex flex-col items-center justify-center gap-4">
-        <p className="text-gray-300">Viagem nao encontrada.</p>
-        <Link to="/vamos-la" className="text-[#00D9E9] font-medium hover:underline">
-          Voltar para Vamos La
-        </Link>
-      </div>
-    );
-  }
+  useEffect(() => {
+    setCarregando(true);
+    setErro('');
 
-  const barco = listaBarcos.find((b) => b.id === viagem.barcoId);
-  const portoSaida = listaPortos.find((p) => p.id === viagem.portoSaidaId);
-  const portoChegada = listaPortos.find((p) => p.id === viagem.portoChegadaId);
-  const statusInfo = STATUS_INFO[viagem.status] || STATUS_INFO['a-confirmar'];
+    Promise.all([
+      fetch(`${API_URL}/api/municipios.php`, { credentials: 'include' }).then((r) => r.json()),
+      fetch(`${API_URL}/api/portos.php`, { credentials: 'include' }).then((r) => r.json()),
+      fetch(`${API_URL}/api/barcos.php`, { credentials: 'include' }).then((r) => r.json()),
+      fetch(`${API_URL}/api/viagens.php`, { credentials: 'include' }).then((r) => r.json()),
+    ])
+      .then(([respMunicipios, respPortos, respBarcos, respViagens]) => {
+        if (respMunicipios.sucesso) setListaMunicipios(respMunicipios.dados);
+
+        let portosFormatados = [];
+        if (respPortos.sucesso) {
+          portosFormatados = respPortos.dados.map((p) => ({
+            id: p.id,
+            nome: p.nome,
+            municipioId: p.municipio_id,
+            endereco: p.endereco,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            possuiPracaAlimentacao: !!p.possui_praca_alimentacao,
+          }));
+          setListaPortos(portosFormatados);
+        }
+
+        let barcosFormatados = [];
+        if (respBarcos.sucesso) {
+          barcosFormatados = respBarcos.dados.map((b) => ({
+            ...b,
+            capacidadeMaxima: b.capacidade_maxima,
+            horarioPartida: b.horario_partida,
+            fotoUrl: b.foto_url,
+          }));
+        }
+
+        if (respViagens.sucesso) {
+          const viagensFormatadas = respViagens.dados.map((v) => ({
+            ...v,
+            barcoId: v.barcoId ?? v.barco_id,
+            portoSaidaId: v.portoSaidaId ?? v.porto_saida_id,
+            horarioPartida: v.horarioPartida ?? v.horario_partida,
+            portoChegadaId: v.portoChegadaId ?? v.porto_chegada_id,
+            horarioChegada: v.horarioChegada ?? v.horario_chegada,
+            dataViagem: v.dataViagem ?? v.data_viagem,
+          }));
+
+          const viagemEncontrada = viagensFormatadas.find((v) => String(v.id) === String(id));
+          setViagem(viagemEncontrada || null);
+
+          if (viagemEncontrada) {
+            const barcoEncontrado = barcosFormatados.find(
+              (b) => String(b.id) === String(viagemEncontrada.barcoId)
+            );
+            setBarco(barcoEncontrado || null);
+          }
+        } else {
+          setErro(respViagens.mensagem || 'Erro ao carregar viagem');
+        }
+      })
+      .catch(() => setErro('Erro ao conectar com o servidor'))
+      .finally(() => setCarregando(false));
+  }, [id]);
 
   const nomeMunicipio = (municipioId) => {
-    return listaMunicipios.find((m) => m.id === municipioId)?.nome || '';
+    return listaMunicipios.find((m) => String(m.id) === String(municipioId))?.nome || '';
   };
 
   const nomePorto = (portoId) => {
-    return listaPortos.find((p) => p.id === portoId)?.nome || 'indefinido';
+    return listaPortos.find((p) => String(p.id) === String(portoId))?.nome || 'indefinido';
   };
 
-  // Gera link do Google Maps pro porto
   const linkMaps = (porto) => {
     if (!porto) return null;
     if (porto.latitude && porto.longitude) {
@@ -54,7 +107,6 @@ function BarcoDetalhes() {
     return null;
   };
 
-  // Link Uber — usa coordenadas do porto de chegada como destino
   const linkUber = (porto) => {
     if (!porto || !porto.latitude || !porto.longitude) return null;
     return 'https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff[latitude]=' +
@@ -62,11 +114,33 @@ function BarcoDetalhes() {
       '&dropoff[nickname]=' + encodeURIComponent(porto.nome || 'Porto');
   };
 
-  // Link 99 — redireciona pro app
   const link99 = (porto) => {
     if (!porto || !porto.latitude || !porto.longitude) return null;
     return 'https://99app.com/corrida?lat=' + porto.latitude + '&lng=' + porto.longitude;
   };
+
+  if (carregando) {
+    return (
+      <div className="min-h-[calc(100vh-64px)] flex items-center justify-center">
+        <p className="text-gray-400">Carregando...</p>
+      </div>
+    );
+  }
+
+  if (erro || !viagem) {
+    return (
+      <div className="min-h-[calc(100vh-64px)] flex flex-col items-center justify-center gap-4">
+        <p className="text-gray-300">{erro || 'Viagem nao encontrada.'}</p>
+        <Link to="/vamos-la" className="text-[#00D9E9] font-medium hover:underline">
+          Voltar para Vamos La
+        </Link>
+      </div>
+    );
+  }
+
+  const portoSaida = listaPortos.find((p) => String(p.id) === String(viagem.portoSaidaId));
+  const portoChegada = listaPortos.find((p) => String(p.id) === String(viagem.portoChegadaId));
+  const statusInfo = STATUS_INFO[viagem.status] || STATUS_INFO['a-confirmar'];
 
   return (
     <div className="min-h-[calc(100vh-64px)] px-4 py-8">
@@ -76,10 +150,8 @@ function BarcoDetalhes() {
           Voltar
         </Link>
 
-        {/* Card principal */}
         <div className="bg-[#0a2e5c] border border-white/10 rounded-xl overflow-hidden">
 
-          {/* Foto ou placeholder */}
           {barco?.fotoUrl ? (
             <img src={barco.fotoUrl} alt={barco.nome} className="h-56 w-full object-cover" />
           ) : (
@@ -90,7 +162,6 @@ function BarcoDetalhes() {
 
           <div className="p-6 space-y-6">
 
-            {/* Cabecalho */}
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-3">
                 <img src={logo} alt="Veleja" className="h-[36px]" />
@@ -104,7 +175,6 @@ function BarcoDetalhes() {
               </span>
             </div>
 
-            {/* Servicos do barco */}
             {barco?.servicos && barco.servicos.length > 0 && (
               <div>
                 <h2 className="font-semibold text-gray-200 mb-2">O que esse barco oferece</h2>
@@ -118,17 +188,14 @@ function BarcoDetalhes() {
               </div>
             )}
 
-            {/* Informacoes da viagem */}
             <div className="space-y-1">
               <h2 className="font-semibold text-gray-200 mb-2">Informacoes da viagem</h2>
               <p className="text-gray-400 text-sm">Data: <span className="text-white">{viagem.dataViagem}</span></p>
             </div>
 
-            {/* Rota completa */}
             <div className="space-y-3">
               <h2 className="font-semibold text-gray-200">Rota</h2>
 
-              {/* Porto de saida */}
               <div className="bg-[#041f43] border border-white/10 rounded-xl p-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 bg-[#00D9E9] rounded-full" />
@@ -152,21 +219,22 @@ function BarcoDetalhes() {
                 )}
               </div>
 
-              {/* Paradas intermediarias */}
-              {viagem.paradas && viagem.paradas.length > 0 && viagem.paradas.map((parada, i) => (
-                <div key={i} className="bg-[#041f43] border border-white/10 rounded-xl p-4 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-[#D4A574] rounded-full" />
-                    <p className="text-[#D4A574] text-xs font-semibold">PARADA {i + 1}</p>
+              {viagem.paradas && viagem.paradas.length > 0 && viagem.paradas.map((parada, i) => {
+                const portoParada = listaPortos.find((p) => String(p.id) === String(parada.portoId));
+                return (
+                  <div key={i} className="bg-[#041f43] border border-white/10 rounded-xl p-4 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-[#D4A574] rounded-full" />
+                      <p className="text-[#D4A574] text-xs font-semibold">PARADA {i + 1}</p>
+                    </div>
+                    <p className="text-white font-medium">{nomePorto(parada.portoId)}</p>
+                    {nomeMunicipio(portoParada?.municipioId) && (
+                      <p className="text-gray-400 text-sm">{nomeMunicipio(portoParada?.municipioId)}</p>
+                    )}
                   </div>
-                  <p className="text-white font-medium">{nomePorto(parada.portoId)}</p>
-                  {nomeMunicipio(parada.municipioId) && (
-                    <p className="text-gray-400 text-sm">{nomeMunicipio(parada.municipioId)}</p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
 
-              {/* Porto de chegada */}
               <div className="bg-[#041f43] border border-white/10 rounded-xl p-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 bg-green-400 rounded-full" />
@@ -186,7 +254,6 @@ function BarcoDetalhes() {
                   <p className="text-gray-400 text-xs">Praca de alimentacao disponivel</p>
                 )}
 
-                {/* Botoes de navegacao */}
                 <div className="flex flex-wrap gap-2 pt-2">
                   {linkMaps(portoChegada) && (
                     <a href={linkMaps(portoChegada)} target="_blank" rel="noopener noreferrer"
