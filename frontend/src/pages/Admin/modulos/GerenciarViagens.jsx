@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import useDadosStore from '../../../store/useDadosStore'; // Mantido APENAS para ler portos/municipios (se forem estáticos)
 import Button from '../../../components/Button';
 
 const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -20,21 +19,18 @@ const FORM_VAZIO = {
   portoChegadaId: '',
   horarioChegada: '',
   dataViagem: '',
-  status: 'confirmada', // deixei alinhado com a sua imagem
+  status: 'confirmada',
   paradas: [],
 };
 
 const PARADA_VAZIA = { municipioId: '', portoId: '' };
 
 function GerenciarViagens() {
-  // Ler municípios e portos (se eles não mudam com frequência)
-  const listaMunicipios = useDadosStore((s) => s.listaMunicipios);
-  const listaPortos = useDadosStore((s) => s.listaPortos);
-
-  // ESTADOS LOCAIS: 100% independentes do Zustand para Barcos e Viagens
+  const [listaMunicipios, setListaMunicipios] = useState([]);
+  const [listaPortos, setListaPortos] = useState([]);
   const [listaBarcos, setListaBarcos] = useState([]);
   const [listaViagens, setListaViagens] = useState([]);
-  
+
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [form, setForm] = useState(FORM_VAZIO);
@@ -44,7 +40,31 @@ function GerenciarViagens() {
   const [alterandoStatusId, setAlterandoStatusId] = useState(null);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
 
-  // 1. Busca os barcos DIRETO DO MYSQL via PHP
+  const carregarMunicipiosDoBanco = () => {
+    fetch(`${API_URL}/api/municipios.php`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) setListaMunicipios(resposta.dados);
+      })
+      .catch((err) => console.error('Erro ao buscar municípios:', err));
+  };
+
+  const carregarPortosDoBanco = () => {
+    fetch(`${API_URL}/api/portos.php`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) {
+          const portosFormatados = resposta.dados.map((p) => ({
+            id: p.id,
+            nome: p.nome,
+            municipioId: p.municipio_id,
+          }));
+          setListaPortos(portosFormatados);
+        }
+      })
+      .catch((err) => console.error('Erro ao buscar portos:', err));
+  };
+
   const carregarBarcosDoBanco = () => {
     fetch(`${API_URL}/api/barcos.php`, { credentials: 'include' })
       .then((res) => res.json())
@@ -52,18 +72,16 @@ function GerenciarViagens() {
         if (resposta.sucesso) {
           const barcosFormatados = resposta.dados.map((b) => ({
             ...b,
-            capacidadeMaxima: b.capacidadeMaxima ?? b.capacidade_maxima,
-            horarioPartida: b.horarioPartida ?? b.horario_partida,
-            fotoUrl: b.fotoUrl ?? b.foto_url,
+            capacidadeMaxima: b.capacidade_max,
+            horarioPartida: b.horario_partida,
+            fotoUrl: b.foto_url,
           }));
-          // Salva SOMENTE no estado desta tela
           setListaBarcos(barcosFormatados);
         }
       })
       .catch((err) => console.error('Erro ao buscar barcos do MySQL:', err));
   };
 
-  // 2. Busca as viagens DIRETO DO MYSQL via PHP
   const carregarViagensDoBanco = () => {
     setCarregando(true);
     fetch(`${API_URL}/api/viagens.php`, { credentials: 'include' })
@@ -79,7 +97,6 @@ function GerenciarViagens() {
             horarioChegada: v.horarioChegada ?? v.horario_chegada,
             dataViagem: v.dataViagem ?? v.data_viagem,
           }));
-          // Salva SOMENTE no estado desta tela
           setListaViagens(viagensFormatadas);
         } else {
           setErro(resposta.mensagem || 'Erro ao carregar viagens do banco');
@@ -89,8 +106,9 @@ function GerenciarViagens() {
       .finally(() => setCarregando(false));
   };
 
-  // Executa as buscas no banco toda vez que o componente for montado
   useEffect(() => {
+    carregarMunicipiosDoBanco();
+    carregarPortosDoBanco();
     carregarBarcosDoBanco();
     carregarViagensDoBanco();
   }, []);
@@ -126,19 +144,17 @@ function GerenciarViagens() {
     });
   };
 
-  // POST/PUT no MySQL
   const handleSalvar = (evento) => {
     evento.preventDefault();
-    
+
     if (!form.barcoId || !form.portoSaidaId || !form.portoChegadaId || !form.dataViagem) {
       setErro('Preencha os campos obrigatórios na interface.');
       return;
     }
-    
+
     setErro('');
     const metodo = editandoId ? 'PUT' : 'POST';
 
-    // AQUI ESTÁ A CORREÇÃO: Traduzindo de camelCase (React) para snake_case (PHP)
     const corpo = {
       ...(editandoId ? { id: editandoId } : {}),
       barco_id: form.barcoId,
@@ -148,14 +164,14 @@ function GerenciarViagens() {
       horario_chegada: form.horarioChegada,
       data_viagem: form.dataViagem,
       status: form.status,
-      paradas: form.paradas
+      paradas: form.paradas,
     };
 
     fetch(`${API_URL}/api/viagens.php`, {
       method: metodo,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(corpo), // Enviando com os nomes corretos para o PHP
+      body: JSON.stringify(corpo),
     })
       .then((res) => res.json())
       .then((resposta) => {
@@ -163,7 +179,6 @@ function GerenciarViagens() {
           setEditandoId(null);
           setForm(FORM_VAZIO);
           setMostrarFormulario(false);
-          // Recarrega viagens do banco
           carregarViagensDoBanco();
         } else {
           setErro(resposta.mensagem || 'Erro da API ao salvar');
@@ -186,7 +201,6 @@ function GerenciarViagens() {
     setMostrarFormulario(false);
   };
 
-  // DELETE no MySQL
   const handleExcluir = (id) => {
     setErro('');
     fetch(`${API_URL}/api/viagens.php`, {
@@ -200,7 +214,7 @@ function GerenciarViagens() {
         setConfirmarExclusaoId(null);
         if (resposta.sucesso) {
           if (editandoId === id) handleCancelar();
-          carregarViagensDoBanco(); // Recarrega do banco
+          carregarViagensDoBanco();
         } else {
           setErro(resposta.mensagem || 'Erro ao excluir');
         }
@@ -208,7 +222,6 @@ function GerenciarViagens() {
       .catch(() => setErro('Erro ao excluir viagem do banco'));
   };
 
-  // PUT (Status) no MySQL
   const handleAlterarStatus = (id, novoStatus) => {
     fetch(`${API_URL}/api/viagens.php`, {
       method: 'PUT',
@@ -218,16 +231,14 @@ function GerenciarViagens() {
     })
       .then((res) => res.json())
       .then((resposta) => {
-        if (resposta.sucesso) carregarViagensDoBanco(); // Recarrega do banco
+        if (resposta.sucesso) carregarViagensDoBanco();
       });
     setAlterandoStatusId(null);
   };
 
-  // POST (Duplicar) no MySQL
   const handleDuplicar = (viagem) => {
     const { id, ...dadosSemId } = viagem;
-    
-    // Na duplicação também precisa converter caso a API espere snake_case
+
     const corpoDuplicar = {
       barco_id: dadosSemId.barcoId,
       porto_saida_id: dadosSemId.portoSaidaId,
@@ -236,7 +247,7 @@ function GerenciarViagens() {
       horario_chegada: dadosSemId.horarioChegada,
       data_viagem: dadosSemId.dataViagem,
       status: dadosSemId.status,
-      paradas: dadosSemId.paradas || []
+      paradas: dadosSemId.paradas || [],
     };
 
     fetch(`${API_URL}/api/viagens.php`, {
@@ -247,7 +258,7 @@ function GerenciarViagens() {
     })
       .then((res) => res.json())
       .then((resposta) => {
-        if (resposta.sucesso) carregarViagensDoBanco(); // Recarrega do banco
+        if (resposta.sucesso) carregarViagensDoBanco();
       });
   };
 
@@ -300,7 +311,7 @@ function GerenciarViagens() {
               <option value="">Selecione um barco</option>
               {listaBarcos.map((b) => (
                 <option key={b.id} value={b.id}>
-                  {b.nome} ({b.capacidadeMaxima ?? b.capacidade_maxima} passageiros)
+                  {b.nome} ({b.capacidadeMaxima} passageiros)
                 </option>
               ))}
             </select>

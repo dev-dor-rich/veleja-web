@@ -37,7 +37,7 @@ function Barcos() {
           const barcosFormatados = resposta.dados.map((b) => ({
             id: b.id,
             nome: b.nome,
-            capacidadeMaxima: b.capacidade_maxima, 
+            capacidadeMaxima: b.capacidade_max, 
             horarioPartida: b.horario_partida || '',
             fotoUrl: b.foto_url || null,
             servicos: b.servicos || [],
