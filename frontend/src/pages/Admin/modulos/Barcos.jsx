@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import useDadosStore from '../../../store/useDadosStore';
+import { useState, useEffect } from 'react';
 import Button from '../../../components/Button';
 
 const SERVICOS_DISPONIVEIS = ['Rede', 'Camarote', 'Lanchonete', 'Banheiro', 'Ar-condicionado', 'Wi-Fi', 'Outros'];
@@ -12,17 +11,35 @@ const FORM_VAZIO = {
   fotoUrl: null,
 };
 
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:8000`
+  : 'https://veleja-site-production.up.railway.app';
+
 function Barcos() {
-  const listaBarcos = useDadosStore((s) => s.listaBarcos);
-  const adicionarBarco = useDadosStore((s) => s.adicionarBarco);
-  const editarBarco = useDadosStore((s) => s.editarBarco);
-  const removerBarco = useDadosStore((s) => s.removerBarco);
+  const [listaBarcos, setListaBarcos] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState('');
 
   const [form, setForm] = useState(FORM_VAZIO);
   const [editandoId, setEditandoId] = useState(null);
   const [confirmarExclusaoId, setConfirmarExclusaoId] = useState(null);
   const [expandidoId, setExpandidoId] = useState(null);
   const [previewFoto, setPreviewFoto] = useState(null);
+
+  const carregarBarcos = () => {
+    setCarregando(true);
+    fetch(`${API_URL}/api/barcos.php`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) setListaBarcos(resposta.dados);
+      })
+      .catch(() => setErro('Erro ao carregar barcos'))
+      .finally(() => setCarregando(false));
+  };
+
+  useEffect(() => {
+    carregarBarcos();
+  }, []);
 
   const handleChange = (campo, valor) => {
     setForm((anterior) => ({ ...anterior, [campo]: valor }));
@@ -54,8 +71,14 @@ function Barcos() {
 
   const handleEditar = (barco) => {
     setEditandoId(barco.id);
-    setForm({ ...FORM_VAZIO, ...barco });
-    setPreviewFoto(barco.fotoUrl || null);
+    setForm({
+      nome: barco.nome,
+      capacidadeMaxima: String(barco.capacidade_maxima ?? ''),
+      servicos: barco.servicos ?? [],
+      horarioPartida: barco.horario_partida ?? '',
+      fotoUrl: barco.foto_url ?? null,
+    });
+    setPreviewFoto(barco.foto_url || null);
     setConfirmarExclusaoId(null);
     setExpandidoId(null);
   };
@@ -63,22 +86,36 @@ function Barcos() {
   const handleSalvar = (evento) => {
     evento.preventDefault();
     if (!form.nome.trim() || !form.capacidadeMaxima) return;
+    setErro('');
 
-    const dados = {
-      ...form,
+    const metodo = editandoId ? 'PUT' : 'POST';
+    const corpo = {
+      ...(editandoId ? { id: editandoId } : {}),
       nome: form.nome.trim(),
-      capacidadeMaxima: parseInt(form.capacidadeMaxima),
+      capacidadeMaxima: parseInt(form.capacidadeMaxima, 10),
+      servicos: form.servicos,
+      horarioPartida: form.horarioPartida || null,
+      fotoUrl: form.fotoUrl || null,
     };
 
-    if (editandoId) {
-      editarBarco(editandoId, dados);
-      setEditandoId(null);
-    } else {
-      adicionarBarco(dados);
-    }
-
-    setForm(FORM_VAZIO);
-    setPreviewFoto(null);
+    fetch(`${API_URL}/api/barcos.php`, {
+      method: metodo,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) {
+          setEditandoId(null);
+          setForm(FORM_VAZIO);
+          setPreviewFoto(null);
+          carregarBarcos();
+        } else {
+          setErro(resposta.mensagem || 'Erro ao salvar');
+        }
+      })
+      .catch(() => setErro('Erro ao salvar barco'));
   };
 
   const handleCancelar = () => {
@@ -88,14 +125,35 @@ function Barcos() {
   };
 
   const handleExcluir = (id) => {
-    removerBarco(id);
-    setConfirmarExclusaoId(null);
-    if (editandoId === id) handleCancelar();
+    setErro('');
+    fetch(`${API_URL}/api/barcos.php`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        setConfirmarExclusaoId(null);
+        if (resposta.sucesso) {
+          if (editandoId === id) handleCancelar();
+          carregarBarcos();
+        } else {
+          setErro(resposta.mensagem || 'Erro ao excluir');
+        }
+      })
+      .catch(() => setErro('Erro ao excluir barco'));
   };
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-white">Barcos</h2>
+
+      {erro && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-3">
+          <p className="text-red-400 text-sm">{erro}</p>
+        </div>
+      )}
 
       <form onSubmit={handleSalvar} className="bg-[#0a2e5c] border border-white/10 rounded-xl p-5 space-y-4">
         <h3 className="text-white font-semibold">
@@ -140,7 +198,7 @@ function Barcos() {
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
-              Foto do barco <span className="text-gray-500">(some ao recarregar pagina por enquanto)</span>
+              Foto do barco
             </label>
             <input
               type="file"
@@ -187,7 +245,9 @@ function Barcos() {
         </div>
       </form>
 
-      {listaBarcos.length === 0 ? (
+      {carregando ? (
+        <p className="text-gray-500 text-sm">Carregando...</p>
+      ) : listaBarcos.length === 0 ? (
         <p className="text-gray-500 text-sm">Nenhum barco cadastrado ainda.</p>
       ) : (
         <ul className="space-y-2">
@@ -201,8 +261,8 @@ function Barcos() {
             >
               <div className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-3">
-                  {barco.fotoUrl ? (
-                    <img src={barco.fotoUrl} alt={barco.nome} className="h-12 w-16 rounded object-cover" />
+                  {barco.foto_url ? (
+                    <img src={barco.foto_url} alt={barco.nome} className="h-12 w-16 rounded object-cover" />
                   ) : (
                     <div className="h-12 w-16 rounded bg-gradient-to-br from-[#00D9E9] to-[#2FA89F] flex items-center justify-center text-2xl">
                       <span>&#9975;</span>
@@ -210,7 +270,7 @@ function Barcos() {
                   )}
                   <div>
                     <p className="text-white font-medium">{barco.nome}</p>
-                    <p className="text-gray-400 text-sm">{barco.capacidadeMaxima} passageiros</p>
+                    <p className="text-gray-400 text-sm">{barco.capacidade_maxima} passageiros</p>
                   </div>
                 </div>
 
@@ -248,7 +308,7 @@ function Barcos() {
 
               {expandidoId === barco.id && (
                 <div className="border-t border-white/10 px-5 py-4 space-y-2 text-sm">
-                  <p className="text-gray-400">Horario de partida: <span className="text-gray-200">{barco.horarioPartida || 'nao informado'}</span></p>
+                  <p className="text-gray-400">Horario de partida: <span className="text-gray-200">{barco.horario_partida || 'nao informado'}</span></p>
                   <div>
                     <p className="text-gray-400 mb-1">Servicos:</p>
                     <div className="flex flex-wrap gap-1.5">
