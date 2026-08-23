@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import useDadosStore from '../../../store/useDadosStore';
+import { useState, useEffect } from 'react';
 import Button from '../../../components/Button';
 
 const FORM_VAZIO = {
@@ -14,17 +13,59 @@ const FORM_VAZIO = {
   horarioFechamento: '',
 };
 
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:8000`
+  : 'https://veleja-site-production.up.railway.app';
+
 function Portos() {
-  const listaMunicipios = useDadosStore((s) => s.listaMunicipios);
-  const listaPortos = useDadosStore((s) => s.listaPortos);
-  const adicionarPorto = useDadosStore((s) => s.adicionarPorto);
-  const editarPorto = useDadosStore((s) => s.editarPorto);
-  const removerPorto = useDadosStore((s) => s.removerPorto);
+  const [listaMunicipios, setListaMunicipios] = useState([]);
+  const [listaPortos, setListaPortos] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState('');
 
   const [form, setForm] = useState(FORM_VAZIO);
   const [editandoId, setEditandoId] = useState(null);
   const [confirmarExclusaoId, setConfirmarExclusaoId] = useState(null);
   const [expandidoId, setExpandidoId] = useState(null);
+
+  const carregarMunicipios = () => {
+    fetch(`${API_URL}/api/municipios.php`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) setListaMunicipios(resposta.dados);
+      });
+  };
+
+  const carregarPortos = () => {
+    setCarregando(true);
+    fetch(`${API_URL}/api/portos.php`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) {
+          const convertidos = resposta.dados.map((p) => ({
+            id: p.id,
+            nome: p.nome,
+            municipioId: p.municipio_id,
+            municipioNome: p.municipio_nome,
+            endereco: p.endereco || '',
+            latitude: p.latitude,
+            longitude: p.longitude,
+            tipoEstacionamento: p.tipo_estacionamento || '',
+            possuiPracaAlimentacao: p.possui_praca_alimentacao,
+            horarioAbertura: p.horario_abertura || '',
+            horarioFechamento: p.horario_fechamento || '',
+          }));
+          setListaPortos(convertidos);
+        }
+      })
+      .catch(() => setErro('Erro ao carregar portos'))
+      .finally(() => setCarregando(false));
+  };
+
+  useEffect(() => {
+    carregarMunicipios();
+    carregarPortos();
+  }, []);
 
   const handleChange = (campo, valor) => {
     setForm((anterior) => ({ ...anterior, [campo]: valor }));
@@ -40,20 +81,36 @@ function Portos() {
   const handleSalvar = (evento) => {
     evento.preventDefault();
     if (!form.nome.trim() || !form.municipioId) return;
-    const dados = {
+    setErro('');
+
+    const corpo = {
       ...form,
       nome: form.nome.trim(),
       endereco: form.endereco.trim(),
-      latitude: form.latitude ? parseFloat(form.latitude) : null,
-      longitude: form.longitude ? parseFloat(form.longitude) : null,
+      latitude: form.latitude !== '' ? form.latitude : null,
+      longitude: form.longitude !== '' ? form.longitude : null,
     };
-    if (editandoId) {
-      editarPorto(editandoId, dados);
-      setEditandoId(null);
-    } else {
-      adicionarPorto(dados);
-    }
-    setForm(FORM_VAZIO);
+
+    const metodo = editandoId ? 'PUT' : 'POST';
+    if (editandoId) corpo.id = editandoId;
+
+    fetch(`${API_URL}/api/portos.php`, {
+      method: metodo,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) {
+          setForm(FORM_VAZIO);
+          setEditandoId(null);
+          carregarPortos();
+        } else {
+          setErro(resposta.mensagem || 'Erro ao salvar porto');
+        }
+      })
+      .catch(() => setErro('Erro ao salvar porto'));
   };
 
   const handleCancelar = () => {
@@ -62,9 +119,24 @@ function Portos() {
   };
 
   const handleExcluir = (id) => {
-    removerPorto(id);
-    setConfirmarExclusaoId(null);
-    if (editandoId === id) handleCancelar();
+    setErro('');
+    fetch(`${API_URL}/api/portos.php`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        setConfirmarExclusaoId(null);
+        if (resposta.sucesso) {
+          if (editandoId === id) handleCancelar();
+          carregarPortos();
+        } else {
+          setErro(resposta.mensagem || 'Erro ao excluir porto');
+        }
+      })
+      .catch(() => setErro('Erro ao excluir porto'));
   };
 
   const nomeMunicipio = (municipioId) => {
@@ -85,6 +157,12 @@ function Portos() {
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-white">Portos</h2>
+
+      {erro && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-3">
+          <p className="text-red-400 text-sm">{erro}</p>
+        </div>
+      )}
 
       {listaMunicipios.length === 0 && (
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-5 py-4">
@@ -223,7 +301,9 @@ function Portos() {
         </div>
       </form>
 
-      {listaPortos.length === 0 ? (
+      {carregando ? (
+        <p className="text-gray-500 text-sm">Carregando...</p>
+      ) : listaPortos.length === 0 ? (
         <p className="text-gray-500 text-sm">Nenhum porto cadastrado ainda.</p>
       ) : (
         <ul className="space-y-2">
@@ -249,7 +329,7 @@ function Portos() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-[#00D9E9] hover:underline"
-                        >
+                    >
                       Ver no Maps
                     </a>
                   )}
@@ -285,7 +365,7 @@ function Portos() {
                 </div>
               </div>
 
-            {expandidoId === porto.id && (
+              {expandidoId === porto.id && (
                 <div className="border-t border-white/10 px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                   <p className="text-gray-400">Endereco: <span className="text-gray-200">{porto.endereco || 'nao informado'}</span></p>
                   <p className="text-gray-400">Estacionamento: <span className="text-gray-200">{porto.tipoEstacionamento || 'nao informado'}</span></p>
