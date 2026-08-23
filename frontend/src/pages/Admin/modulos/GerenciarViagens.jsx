@@ -72,7 +72,7 @@ function GerenciarViagens() {
         if (resposta.sucesso) {
           const barcosFormatados = resposta.dados.map((b) => ({
             ...b,
-            capacidadeMaxima: b.capacidade_max,
+            capacidadeMaxima: b.capacidade_maxima,
             horarioPartida: b.horario_partida,
             fotoUrl: b.foto_url,
           }));
