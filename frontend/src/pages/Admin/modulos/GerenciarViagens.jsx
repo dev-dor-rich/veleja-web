@@ -20,7 +20,7 @@ const FORM_VAZIO = {
   portoChegadaId: '',
   horarioChegada: '',
   dataViagem: '',
-  status: 'a-confirmar',
+  status: 'confirmada', // deixei alinhado com a sua imagem
   paradas: [],
 };
 
@@ -129,17 +129,33 @@ function GerenciarViagens() {
   // POST/PUT no MySQL
   const handleSalvar = (evento) => {
     evento.preventDefault();
-    if (!form.barcoId || !form.portoSaidaId || !form.portoChegadaId || !form.dataViagem) return;
+    
+    if (!form.barcoId || !form.portoSaidaId || !form.portoChegadaId || !form.dataViagem) {
+      setErro('Preencha os campos obrigatórios na interface.');
+      return;
+    }
+    
     setErro('');
-
     const metodo = editandoId ? 'PUT' : 'POST';
-    const corpo = { ...(editandoId ? { id: editandoId } : {}), ...form };
+
+    // AQUI ESTÁ A CORREÇÃO: Traduzindo de camelCase (React) para snake_case (PHP)
+    const corpo = {
+      ...(editandoId ? { id: editandoId } : {}),
+      barco_id: form.barcoId,
+      porto_saida_id: form.portoSaidaId,
+      horario_partida: form.horarioPartida,
+      porto_chegada_id: form.portoChegadaId,
+      horario_chegada: form.horarioChegada,
+      data_viagem: form.dataViagem,
+      status: form.status,
+      paradas: form.paradas
+    };
 
     fetch(`${API_URL}/api/viagens.php`, {
       method: metodo,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(corpo),
+      body: JSON.stringify(corpo), // Enviando com os nomes corretos para o PHP
     })
       .then((res) => res.json())
       .then((resposta) => {
@@ -150,10 +166,10 @@ function GerenciarViagens() {
           // Recarrega viagens do banco
           carregarViagensDoBanco();
         } else {
-          setErro(resposta.mensagem || 'Erro ao salvar');
+          setErro(resposta.mensagem || 'Erro da API ao salvar');
         }
       })
-      .catch(() => setErro('Erro ao salvar viagem no banco'));
+      .catch(() => setErro('Erro de conexão ao salvar viagem no banco'));
   };
 
   const handleEditar = (viagem) => {
@@ -210,11 +226,24 @@ function GerenciarViagens() {
   // POST (Duplicar) no MySQL
   const handleDuplicar = (viagem) => {
     const { id, ...dadosSemId } = viagem;
+    
+    // Na duplicação também precisa converter caso a API espere snake_case
+    const corpoDuplicar = {
+      barco_id: dadosSemId.barcoId,
+      porto_saida_id: dadosSemId.portoSaidaId,
+      horario_partida: dadosSemId.horarioPartida,
+      porto_chegada_id: dadosSemId.portoChegadaId,
+      horario_chegada: dadosSemId.horarioChegada,
+      data_viagem: dadosSemId.dataViagem,
+      status: dadosSemId.status,
+      paradas: dadosSemId.paradas || []
+    };
+
     fetch(`${API_URL}/api/viagens.php`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(dadosSemId),
+      body: JSON.stringify(corpoDuplicar),
     })
       .then((res) => res.json())
       .then((resposta) => {
