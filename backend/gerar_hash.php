@@ -1,7 +1,7 @@
 <?php
 $senhas = [
     'yasmim@veleja.com' => 'gatinhos123',
-    'cofrinhochurros@veleja.com' => 'Raisethevil67',
+    'cofrinhochurros@veleja.com' => 'Raisethedevil67',
 ];
 
 foreach ($senhas as $email => $senha) {

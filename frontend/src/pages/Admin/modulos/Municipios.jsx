@@ -2,43 +2,72 @@
 // O mais simples do sistema — só nome. Serve de base pro dropdown
 // de municípios que aparece em Portos e em Gerenciar Viagens
 
-import { useState } from 'react';
-import useDadosStore from '../../../store/useDadosStore';
+import { useState, useEffect } from 'react';
 import Button from '../../../components/Button';
 
-// Estado inicial do formulário — facilita o reset depois de salvar
 const FORM_VAZIO = { nome: '' };
 
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:8000`
+  : 'https://veleja-site-production.up.railway.app';
+
 function Municipios() {
-  const listaMunicipios = useDadosStore((s) => s.listaMunicipios);
-  const adicionarMunicipio = useDadosStore((s) => s.adicionarMunicipio);
-  const editarMunicipio = useDadosStore((s) => s.editarMunicipio);
-  const removerMunicipio = useDadosStore((s) => s.removerMunicipio);
-
+  const [listaMunicipios, setListaMunicipios] = useState([]);
+  const [carregando, setCarregando] = useState(true);
   const [form, setForm] = useState(FORM_VAZIO);
-  const [editandoId, setEditandoId] = useState(null); // null = modo cadastro
+  const [editandoId, setEditandoId] = useState(null);
   const [confirmarExclusaoId, setConfirmarExclusaoId] = useState(null);
+  const [erro, setErro] = useState('');
 
-  // Preenche o formulário com os dados do município a editar
+  // Busca a lista de municípios na API
+  const carregarMunicipios = () => {
+    setCarregando(true);
+    fetch(`${API_URL}/api/municipios.php`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) setListaMunicipios(resposta.dados);
+      })
+      .catch(() => setErro('Erro ao carregar municípios'))
+      .finally(() => setCarregando(false));
+  };
+
+  useEffect(() => {
+    carregarMunicipios();
+  }, []);
+
   const handleEditar = (municipio) => {
     setEditandoId(municipio.id);
     setForm({ nome: municipio.nome });
     setConfirmarExclusaoId(null);
   };
 
-  // Salva cadastro ou edição
   const handleSalvar = (evento) => {
     evento.preventDefault();
     if (!form.nome.trim()) return;
+    setErro('');
 
-    if (editandoId) {
-      editarMunicipio(editandoId, { nome: form.nome.trim() });
-      setEditandoId(null);
-    } else {
-      adicionarMunicipio({ nome: form.nome.trim() });
-    }
+    const metodo = editandoId ? 'PUT' : 'POST';
+    const corpo = editandoId
+      ? { id: editandoId, nome: form.nome.trim() }
+      : { nome: form.nome.trim() };
 
-    setForm(FORM_VAZIO);
+    fetch(`${API_URL}/api/municipios.php`, {
+      method: metodo,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        if (resposta.sucesso) {
+          setForm(FORM_VAZIO);
+          setEditandoId(null);
+          carregarMunicipios();
+        } else {
+          setErro(resposta.mensagem || 'Erro ao salvar');
+        }
+      })
+      .catch(() => setErro('Erro ao salvar município'));
   };
 
   const handleCancelarEdicao = () => {
@@ -47,17 +76,38 @@ function Municipios() {
   };
 
   const handleExcluir = (id) => {
-    removerMunicipio(id);
-    setConfirmarExclusaoId(null);
-    if (editandoId === id) {
-      setEditandoId(null);
-      setForm(FORM_VAZIO);
-    }
+    setErro('');
+    fetch(`${API_URL}/api/municipios.php`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+      .then((res) => res.json())
+      .then((resposta) => {
+        setConfirmarExclusaoId(null);
+        if (resposta.sucesso) {
+          if (editandoId === id) {
+            setEditandoId(null);
+            setForm(FORM_VAZIO);
+          }
+          carregarMunicipios();
+        } else {
+          setErro(resposta.mensagem || 'Erro ao excluir');
+        }
+      })
+      .catch(() => setErro('Erro ao excluir município'));
   };
 
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-bold text-white">Municípios</h2>
+
+      {erro && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-3">
+          <p className="text-red-400 text-sm">{erro}</p>
+        </div>
+      )}
 
       {/* Formulário de cadastro/edição */}
       <form
@@ -91,7 +141,9 @@ function Municipios() {
       </form>
 
       {/* Lista de municípios */}
-      {listaMunicipios.length === 0 ? (
+      {carregando ? (
+        <p className="text-gray-500 text-sm">Carregando...</p>
+      ) : listaMunicipios.length === 0 ? (
         <p className="text-gray-500 text-sm">Nenhum município cadastrado ainda.</p>
       ) : (
         <ul className="space-y-2">
