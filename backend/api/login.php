@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require dirname(__DIR__) . '/config/database.php';
 
-// ===== RATE LIMITING SIMPLES E ROBUSTO =====
+// ===== RATE LIMITING =====
 function obterIPCliente() {
     if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
         return $_SERVER['HTTP_CF_CONNECTING_IP'];
@@ -46,14 +46,12 @@ function verificarRateLimit($conexao, $ip, $email) {
     $max_tentativas = 5;
     $timestamp_limite = $agora - $limite_janela;
     
-    // Query simples e direta
     $result = $conexao->query(
         "SELECT COUNT(*) as tentativas FROM login_attempts 
-         WHERE (ip = '$ip' OR email = '$email') AND timestamp > $timestamp_limite"
+         WHERE (ip = '$ip' OR email = '$email') AND timestamp > $timestamp_limite LIMIT 1"
     );
     
     if (!$result) {
-        // Se a query falhar, deixa passar (fail-open)
         return ['bloqueado' => false];
     }
     
@@ -157,6 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'mensagem' => 'Login realizado com sucesso'
             ]);
         } else {
+            // Senha incorreta
             registrarTentativaLogin($conexao, $ip, $email, false);
             
             echo json_encode([
@@ -165,6 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
         }
     } else {
+        // Email não existe
         registrarTentativaLogin($conexao, $ip, $email, false);
         
         echo json_encode([
