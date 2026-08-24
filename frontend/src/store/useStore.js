@@ -33,15 +33,24 @@ const useStore = create((set) => ({
         credentials: 'include', // Importante: enviar cookies
       });
 
-      if (!response.ok) {
+      const dados = await response.json();
+
+      // Tratamento específico por status HTTP
+      if (response.status === 429) {
         set({
-          mensagemErro: 'Erro no servidor (HTTP ' + response.status + '). Verifique se o PHP e o MySQL estão configurados.',
+          mensagemErro: dados.mensagem || 'Muitas tentativas de login. Tente novamente em 15 minutos.',
           carregando: false,
         });
         return false;
       }
 
-      const dados = await response.json();
+      if (!response.ok) {
+        set({
+          mensagemErro: dados.mensagem || `Erro no servidor (HTTP ${response.status})`,
+          carregando: false,
+        });
+        return false;
+      }
 
       if (dados.sucesso) {
         set({
