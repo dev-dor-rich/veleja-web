@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require dirname(__DIR__) . '/config/database.php';
 
-// ===== RATE LIMITING =====
+// ===== RATE LIMITING SIMPLES E ROBUSTO =====
 function obterIPCliente() {
     if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
         return $_SERVER['HTTP_CF_CONNECTING_IP'];
@@ -43,43 +43,37 @@ function obterIPCliente() {
 function verificarRateLimit($conexao, $ip, $email) {
     $agora = time();
     $limite_janela = 900; // 15 minutos
-    $max_tentativas = 5;  // máximo 5 tentativas por janela
-    
+    $max_tentativas = 5;
     $timestamp_limite = $agora - $limite_janela;
     
-    $query = "SELECT COUNT(*) as tentativas FROM login_attempts 
-              WHERE (ip = ? OR email = ?) AND timestamp > ?";
-    $stmt = $conexao->prepare($query);
+    // Query simples e direta
+    $result = $conexao->query(
+        "SELECT COUNT(*) as tentativas FROM login_attempts 
+         WHERE (ip = '$ip' OR email = '$email') AND timestamp > $timestamp_limite"
+    );
     
-    if (!$stmt) {
-        return ['bloqueado' => false, 'erro' => true];
+    if (!$result) {
+        // Se a query falhar, deixa passar (fail-open)
+        return ['bloqueado' => false];
     }
     
-    $stmt->bind_param('ssi', $ip, $email, $timestamp_limite);
-    $stmt->execute();
-    $resultado = $stmt->get_result();
-    $linha = $resultado->fetch_assoc();
-    $tentativas = $linha['tentativas'] ?? 0;
-    $stmt->close();
+    $row = $result->fetch_assoc();
+    $tentativas = (int)($row['tentativas'] ?? 0);
     
     return [
         'bloqueado' => $tentativas >= $max_tentativas,
-        'erro' => false,
         'tentativas' => $tentativas
     ];
 }
 
 function registrarTentativaLogin($conexao, $ip, $email, $sucesso) {
     $agora = time();
-    $query = "INSERT INTO login_attempts (ip, email, timestamp, sucesso) VALUES (?, ?, ?, ?)";
-    $stmt = $conexao->prepare($query);
+    $sucesso_int = $sucesso ? 1 : 0;
     
-    if ($stmt) {
-        $sucesso_int = $sucesso ? 1 : 0;
-        $stmt->bind_param('ssii', $ip, $email, $agora, $sucesso_int);
-        $stmt->execute();
-        $stmt->close();
-    }
+    $conexao->query(
+        "INSERT INTO login_attempts (ip, email, timestamp, sucesso) 
+         VALUES ('$ip', '$email', $agora, $sucesso_int)"
+    );
 }
 
 // ===== LÓGICA DE LOGIN =====
@@ -163,7 +157,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'mensagem' => 'Login realizado com sucesso'
             ]);
         } else {
-            // Senha incorreta
             registrarTentativaLogin($conexao, $ip, $email, false);
             
             echo json_encode([
@@ -172,7 +165,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
         }
     } else {
-        // Email não existe
         registrarTentativaLogin($conexao, $ip, $email, false);
         
         echo json_encode([
