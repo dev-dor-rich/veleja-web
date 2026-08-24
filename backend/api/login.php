@@ -21,29 +21,103 @@ header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Credentials: true');
 header('Content-Type: application/json; charset=UTF-8');
 
-
-
 // Responder a preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-// ... resto do código
-
 require dirname(__DIR__) . '/config/database.php';
 
+// ===== RATE LIMITING =====
+function obterIPCliente() {
+    if (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
+        return $_SERVER['HTTP_CF_CONNECTING_IP'];
+    }
+    if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        return explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0];
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+}
+
+function verificarRateLimit($conexao, $ip, $email) {
+    $agora = time();
+    $limite_janela = 900; // 15 minutos
+    $max_tentativas = 5;  // máximo 5 tentativas por janela
+    
+    $timestamp_limite = $agora - $limite_janela;
+    
+    $query = "SELECT COUNT(*) as tentativas FROM login_attempts 
+              WHERE (ip = ? OR email = ?) AND timestamp > ?";
+    $stmt = $conexao->prepare($query);
+    
+    if (!$stmt) {
+        return ['bloqueado' => false, 'erro' => true];
+    }
+    
+    $stmt->bind_param('ssi', $ip, $email, $timestamp_limite);
+    $stmt->execute();
+    $resultado = $stmt->get_result();
+    $linha = $resultado->fetch_assoc();
+    $tentativas = $linha['tentativas'] ?? 0;
+    $stmt->close();
+    
+    return [
+        'bloqueado' => $tentativas >= $max_tentativas,
+        'erro' => false,
+        'tentativas' => $tentativas
+    ];
+}
+
+function registrarTentativaLogin($conexao, $ip, $email, $sucesso) {
+    $agora = time();
+    $query = "INSERT INTO login_attempts (ip, email, timestamp, sucesso) VALUES (?, ?, ?, ?)";
+    $stmt = $conexao->prepare($query);
+    
+    if ($stmt) {
+        $sucesso_int = $sucesso ? 1 : 0;
+        $stmt->bind_param('ssii', $ip, $email, $agora, $sucesso_int);
+        $stmt->execute();
+        $stmt->close();
+    }
+}
+
+// ===== LÓGICA DE LOGIN =====
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $ip = obterIPCliente();
     $dados = json_decode(file_get_contents('php://input'), true);
     
-    $email = $dados['email'] ?? '';
+    $email = trim($dados['email'] ?? '');
     $senha = $dados['senha'] ?? '';
 
+    // Validações básicas
     if (empty($email) || empty($senha)) {
         echo json_encode([
             'sucesso' => false,
             'mensagem' => 'Email e senha são obrigatórios'
         ]);
+        exit();
+    }
+
+    // Validar formato email
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode([
+            'sucesso' => false,
+            'mensagem' => 'Email inválido'
+        ]);
+        exit();
+    }
+
+    // Verificar rate limiting
+    $rate_check = verificarRateLimit($conexao, $ip, $email);
+    if ($rate_check['bloqueado']) {
+        http_response_code(429);
+        echo json_encode([
+            'sucesso' => false,
+            'mensagem' => 'Muitas tentativas de login. Tente novamente em 15 minutos.'
+        ]);
+        registrarTentativaLogin($conexao, $ip, $email, false);
         exit();
     }
 
@@ -68,18 +142,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Validar senha com hash
         if (password_verify($senha, $admin['senha_hash'])) {
-            // Configurar cookie de sessão para funcionar entre domínios diferentes
-            // (frontend no Vercel, backend no Railway)
+            // Login bem-sucedido
+            registrarTentativaLogin($conexao, $ip, $email, true);
+            
             session_set_cookie_params([
                 'lifetime' => 0,
                 'path' => '/',
                 'domain' => '',
-                'secure' => true,      // obrigatório com SameSite=None
+                'secure' => true,
                 'httponly' => true,
-                'samesite' => 'None',  // permite cookie cross-site (Vercel -> Railway)
+                'samesite' => 'None',
             ]);
 
-            // Iniciar sessão segura
             session_start();
             $_SESSION['admin_id'] = $admin['id'];
             $_SESSION['admin_email'] = $admin['email'];
@@ -89,12 +163,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'mensagem' => 'Login realizado com sucesso'
             ]);
         } else {
+            // Senha incorreta
+            registrarTentativaLogin($conexao, $ip, $email, false);
+            
             echo json_encode([
                 'sucesso' => false,
                 'mensagem' => 'Email ou senha inválidos'
             ]);
         }
     } else {
+        // Email não existe
+        registrarTentativaLogin($conexao, $ip, $email, false);
+        
         echo json_encode([
             'sucesso' => false,
             'mensagem' => 'Email ou senha inválidos'
